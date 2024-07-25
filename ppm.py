@@ -64,7 +64,13 @@ class ProductVariables:
 
 class NpvCalculationResult:
     def __init__(self):
-        self.npv = 0
+        self.future_development_cost = 0
+        self.future_sales = 0
+        self.future_cost_of_goods = 0
+        self.future_sga = 0
+
+    def npv(self):
+        return self.future_sales - self.future_cost_of_goods - self.future_sga - self.future_development_cost
 
 def calculate_npv(product_variables, company_constants):
 
@@ -80,11 +86,8 @@ def calculate_npv(product_variables, company_constants):
         # compute the future value of the cost of development for this year
         development_cost_fte_fv = fv(company_constants.development_fte_cost_pv, company_constants.development_cost_trend, year)
 
-        # compute the future value of this year (as a negative)
-        fv_year = -development_cost_fte_fv * product_variables.development_ftes
-
-        # add the (negative) cost of development to the npv
-        npv_calculation_result.npv += pv(fv_year, company_constants.market_return, year)
+        # add the cost of development
+        npv_calculation_result.future_development_cost += pv(development_cost_fte_fv * product_variables.development_ftes, company_constants.market_return, year)
 
         # move to the next year
         year += 1
@@ -95,11 +98,8 @@ def calculate_npv(product_variables, company_constants):
         # compute the future value of the cost of development for this year
         development_cost_fte_fv = fv(company_constants.development_fte_cost_pv, company_constants.development_cost_trend, year)
 
-        # compute the future value of this year (as a negative)
-        fv_year = -development_cost_fte_fv * product_variables.maintenance_ftes
-
-        # add the (negative) cost of development to the npv
-        npv_calculation_result.npv += pv(fv_year, company_constants.market_return, year)
+        # add the cost of development
+        npv_calculation_result.future_development_cost += pv(development_cost_fte_fv * product_variables.maintenance_ftes, company_constants.market_return, year)
 
         # move to the next year
         year += 1
@@ -117,14 +117,13 @@ def calculate_npv(product_variables, company_constants):
         sga_fv = list_price_fv * company_constants.sga_percentage
 
         # compute the future value of this year
-        fv_year = 0
-        fv_year -= development_cost_fte_fv * product_variables.maintenance_ftes
-        fv_year += product_variables.yearly_unit_sales * list_price_fv
-        fv_year -= product_variables.yearly_unit_sales * unit_cost_fv
-        fv_year -= product_variables.yearly_unit_sales * sga_fv
+        development_cost_fte_fv = fv(company_constants.development_fte_cost_pv, company_constants.development_cost_trend, year)
 
-        # add the net to the npv
-        npv_calculation_result.npv += pv(fv_year, company_constants.market_return, year)
+        # add the cost of development, sales, cost of goods, and sga
+        npv_calculation_result.future_development_cost += pv(development_cost_fte_fv * product_variables.maintenance_ftes, company_constants.market_return, year)
+        npv_calculation_result.future_sales += pv(list_price_fv * product_variables.yearly_unit_sales, company_constants.market_return, year)
+        npv_calculation_result.future_cost_of_goods += pv(unit_cost_fv * product_variables.yearly_unit_sales, company_constants.market_return, year)
+        npv_calculation_result.future_sga += pv(sga_fv * product_variables.yearly_unit_sales, company_constants.market_return, year)
 
         # move to the next year
         year += 1
@@ -141,7 +140,7 @@ def simulate_npv():
 npvs = []
 for i in range(10000):
     npv_calculation_result = simulate_npv()
-    npvs.append(npv_calculation_result.npv)
+    npvs.append(npv_calculation_result.npv())
 plt.hist(npvs, bins=30)
 plt.xlabel('NPV')
 plt.ticklabel_format(style='plain', axis='x')
