@@ -88,20 +88,30 @@ class ProductVariablesSnapshot:
         # convert range to actual value using a triangular distribution
         self.yearly_unit_sales = gen_t(yearly_unit_sales_range)
 
+    def total_remaining_years(self):
+        return self.remaining_development_years + self.remaining_delay_years + self.remaining_sales_years
+
 class NpvCalculationResult:
     def __init__(self):
         self.future_development_cost = 0
         self.future_sales = 0
         self.future_cost_of_goods = 0
         self.future_sga = 0
+        self.future_unit_sales = 0
 
     def npv(self):
         return self.future_sales - self.future_cost_of_goods - self.future_sga - self.future_development_cost
 
+    def roi(self):
+        return self.npv() / self.future_development_cost
+
+    def annualized_roi(self, years):
+        return (1 + self.roi()) ** (1 / years) - 1
+
 def calculate_npv(product_variables_snapshot, company_constants):
 
     # this is what we will calculate and return 
-    npv_calculation_result = NpvCalculationResult()
+    result = NpvCalculationResult()
 
     # starting at year zero (today)
     year = 0
@@ -113,7 +123,7 @@ def calculate_npv(product_variables_snapshot, company_constants):
         development_cost_fte_fv = fv(company_constants.development_fte_cost_pv, company_constants.development_cost_trend, year)
 
         # add the cost of development
-        npv_calculation_result.future_development_cost += pv(development_cost_fte_fv * product_variables_snapshot.development_ftes, company_constants.market_return, year)
+        result.future_development_cost += pv(development_cost_fte_fv * product_variables_snapshot.development_ftes, company_constants.market_return, year)
 
         # move to the next year
         year += 1
@@ -125,7 +135,7 @@ def calculate_npv(product_variables_snapshot, company_constants):
         development_cost_fte_fv = fv(company_constants.development_fte_cost_pv, company_constants.development_cost_trend, year)
 
         # add the cost of development
-        npv_calculation_result.future_development_cost += pv(development_cost_fte_fv * product_variables_snapshot.maintenance_ftes, company_constants.market_return, year)
+        result.future_development_cost += pv(development_cost_fte_fv * product_variables_snapshot.maintenance_ftes, company_constants.market_return, year)
 
         # move to the next year
         year += 1
@@ -142,33 +152,67 @@ def calculate_npv(product_variables_snapshot, company_constants):
         # compute the selling, general, and administrative expenses per unit
         sga_fv = unit_price_fv * company_constants.sga_percentage
 
-        # compute the future value of this year
-        development_cost_fte_fv = fv(company_constants.development_fte_cost_pv, company_constants.development_cost_trend, year)
-
-        # add the cost of development, sales, cost of goods, and sga
-        npv_calculation_result.future_development_cost += pv(development_cost_fte_fv * product_variables_snapshot.maintenance_ftes, company_constants.market_return, year)
-        npv_calculation_result.future_sales += pv(unit_price_fv * product_variables_snapshot.yearly_unit_sales, company_constants.market_return, year)
-        npv_calculation_result.future_cost_of_goods += pv(unit_cost_fv * product_variables_snapshot.yearly_unit_sales, company_constants.market_return, year)
-        npv_calculation_result.future_sga += pv(sga_fv * product_variables_snapshot.yearly_unit_sales, company_constants.market_return, year)
+        # record unit sales, costs of development, sales, cost of goods, sga
+        result.future_unit_sales += product_variables_snapshot.yearly_unit_sales
+        result.future_development_cost += pv(development_cost_fte_fv * product_variables_snapshot.maintenance_ftes, company_constants.market_return, year)
+        result.future_sales += pv(unit_price_fv * product_variables_snapshot.yearly_unit_sales, company_constants.market_return, year)
+        result.future_cost_of_goods += pv(unit_cost_fv * product_variables_snapshot.yearly_unit_sales, company_constants.market_return, year)
+        result.future_sga += pv(sga_fv * product_variables_snapshot.yearly_unit_sales, company_constants.market_return, year)
 
         # move to the next year
         year += 1
 
-    return npv_calculation_result
+    return result
 
 company_constants = CompanyConstants()
 product_variables_ranges = ProductVariablesRanges()
 
-def simulate_one_npv():
-    product_variables_snapshot = ProductVariablesSnapshot(product_variables_ranges)
-    npv_calculation_result = calculate_npv(product_variables_snapshot, company_constants)
-    return npv_calculation_result
-
 npvs = []
+annualized_rois = []
+development_costs = []
+unit_sales = []
+sales = []
+years = []
+
 for i in range(10000):
-    npv_calculation_result = simulate_one_npv()
-    npvs.append(npv_calculation_result.npv())
-plt.hist(npvs, bins=30)
-plt.xlabel('NPV')
-plt.ticklabel_format(style='plain', axis='x')
+    product_variables_snapshot = ProductVariablesSnapshot(product_variables_ranges)
+    result = calculate_npv(product_variables_snapshot, company_constants)
+    npvs.append(result.npv()/1000000)
+    development_costs.append(result.future_development_cost/1000000)
+    annualized_rois.append(result.annualized_roi(product_variables_snapshot.total_remaining_years())*100)
+    unit_sales.append(result.future_unit_sales)
+    sales.append(result.future_sales/1000000)
+    years.append(product_variables_snapshot.total_remaining_years())
+
+# Plotting histograms
+plt.figure(figsize=(10, 5))
+
+rows = 2
+cols = 3
+
+plt.subplot(rows, cols, 1)
+plt.hist(unit_sales, bins=30, edgecolor='black')
+plt.xlabel('Sales (units)')
+
+plt.subplot(rows, cols, 2)
+plt.hist(sales, bins=30, edgecolor='black')
+plt.xlabel('Sales ($ millions)')
+
+plt.subplot(rows, cols, 3)
+plt.hist(development_costs, bins=30, edgecolor='black')
+plt.xlabel('Development ($ millions)')
+
+plt.subplot(rows, cols, 4)
+plt.hist(years, bins=30, edgecolor='black')
+plt.xlabel('Remaining Years')
+
+plt.subplot(rows, cols, 5)
+plt.hist(npvs, bins=30, edgecolor='black')
+plt.xlabel('NPV ($ millions)')
+
+plt.subplot(rows, cols, 6)
+plt.hist(annualized_rois, bins=30, edgecolor='black')
+plt.xlabel('Annualized ROI (%)')
+
+plt.tight_layout()
 plt.show()
