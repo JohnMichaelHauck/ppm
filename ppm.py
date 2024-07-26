@@ -1,3 +1,4 @@
+from enum import Enum
 import numpy as np # linear algebra library
 import matplotlib.pyplot as plt # plotting library
 
@@ -60,21 +61,36 @@ class ProductVariablesRanges:
     def highest_price(self):
         return self.unit_cost_pv[2] * self.unit_price_cost_factor[2]
 
-def gen_t(a):
-    return np.random.triangular(a[0], a[1], a[2])
+def gen_t(a, tornado, key):
+    if(key.value & tornado.value):
+        return np.random.triangular(a[0], a[1], a[2])
+    else:
+        return a[1]        
+
+class Tornado(Enum):
+    OFF = 0b11111111
+    DEVELOPMENT_FTES = 0b00000001
+    REMAINING_DEVELOPMENT_YEARS = 0b00000010
+    REMAINING_DELAY_YEARS = 0b00000100
+    MAINTENANCE_FTES = 0b00001000
+    UNIT_COST_PV = 0b00010000
+    REMAINING_SALES_YEARS = 0b00100000
+    UNIT_PRICE_COST_FACTOR = 0b01000000
+    YEARLY_UNIT_SALES = 0b10000000
+    LOCKED = 0b00000000
 
 class ProductVariablesSnapshot:
-    def __init__(self, product_variables_ranges):
+    def __init__(self, product_variables_ranges, tornado):
         
-        # convert ranges to actual values using a triangular distribution
-        self.development_ftes = gen_t(product_variables_ranges.development_ftes)
-        self.remaining_development_years = gen_t(product_variables_ranges.remaining_development_years)
-        self.remaining_delay_years = gen_t(product_variables_ranges.remaining_delay_years)
-        self.maintenance_ftes = gen_t(product_variables_ranges.maintenance_ftes)
-        self.unit_cost_pv = gen_t(product_variables_ranges.unit_cost_pv)
-        self.remaining_sales_years = gen_t(product_variables_ranges.remaining_sales_years)
-        self.unit_price_cost_factor = gen_t(product_variables_ranges.unit_price_cost_factor)
-        
+        # convert range to actual value using a triangular distribution
+        self.development_ftes = gen_t(product_variables_ranges.development_ftes, tornado, Tornado.DEVELOPMENT_FTES)
+        self.remaining_development_years = gen_t(product_variables_ranges.remaining_development_years, tornado, Tornado.REMAINING_DEVELOPMENT_YEARS)
+        self.remaining_delay_years = gen_t(product_variables_ranges.remaining_delay_years, tornado, Tornado.REMAINING_DELAY_YEARS)
+        self.maintenance_ftes = gen_t(product_variables_ranges.maintenance_ftes, tornado, Tornado.MAINTENANCE_FTES)
+        self.unit_cost_pv = gen_t(product_variables_ranges.unit_cost_pv, tornado, Tornado.UNIT_COST_PV)
+        self.remaining_sales_years = gen_t(product_variables_ranges.remaining_sales_years, tornado, Tornado.REMAINING_SALES_YEARS)
+        self.unit_price_cost_factor = gen_t(product_variables_ranges.unit_price_cost_factor, tornado, Tornado.UNIT_PRICE_COST_FACTOR)
+
         # compute the unit price
         self.unit_price_pv = self.unit_cost_pv * self.unit_price_cost_factor
 
@@ -86,7 +102,7 @@ class ProductVariablesSnapshot:
             yearly_unit_sales_range[i] = np.interp(self.unit_price_pv, price_range, sales_range_i)
         
         # convert range to actual value using a triangular distribution
-        self.yearly_unit_sales = gen_t(yearly_unit_sales_range)
+        self.yearly_unit_sales = gen_t(yearly_unit_sales_range, tornado, Tornado.YEARLY_UNIT_SALES)
 
     def total_remaining_years(self):
         return self.remaining_development_years + self.remaining_delay_years + self.remaining_sales_years
@@ -174,8 +190,12 @@ unit_sales = []
 sales = []
 years = []
 
+npvs_remaining_development_years = []
+npvs_remaining_sales_years = []
+npvs_yearly_unit_sales = []
+
 for i in range(10000):
-    product_variables_snapshot = ProductVariablesSnapshot(product_variables_ranges)
+    product_variables_snapshot = ProductVariablesSnapshot(product_variables_ranges, Tornado.OFF)
     result = calculate_npv(product_variables_snapshot, company_constants)
     npvs.append(result.npv()/1000000)
     development_costs.append(result.future_development_cost/1000000)
@@ -184,35 +204,68 @@ for i in range(10000):
     sales.append(result.future_sales/1000000)
     years.append(product_variables_snapshot.total_remaining_years())
 
-# Plotting histograms
+    product_variables_snapshot = ProductVariablesSnapshot(product_variables_ranges, Tornado.DEVELOPMENT_FTES)
+    result = calculate_npv(product_variables_snapshot, company_constants)
+    npvs_remaining_development_years.append(result.npv()/1000000)
+
+    product_variables_snapshot = ProductVariablesSnapshot(product_variables_ranges, Tornado.UNIT_COST_PV)
+    result = calculate_npv(product_variables_snapshot, company_constants)
+    npvs_remaining_sales_years.append(result.npv()/1000000)
+
+    product_variables_snapshot = ProductVariablesSnapshot(product_variables_ranges, Tornado.YEARLY_UNIT_SALES)
+    result = calculate_npv(product_variables_snapshot, company_constants)
+    npvs_yearly_unit_sales.append(result.npv()/1000000)
+
+# Plotting
 plt.figure(figsize=(10, 5))
 
-rows = 2
+rows = 3
 cols = 3
 
 plt.subplot(rows, cols, 1)
 plt.hist(unit_sales, bins=30, edgecolor='black')
+plt.yticks([])
 plt.xlabel('Sales (units)')
 
 plt.subplot(rows, cols, 2)
 plt.hist(sales, bins=30, edgecolor='black')
+plt.yticks([])
 plt.xlabel('Sales ($ millions)')
 
 plt.subplot(rows, cols, 3)
 plt.hist(development_costs, bins=30, edgecolor='black')
+plt.yticks([])
 plt.xlabel('Development ($ millions)')
 
 plt.subplot(rows, cols, 4)
 plt.hist(years, bins=30, edgecolor='black')
+plt.yticks([])
 plt.xlabel('Remaining Years')
 
 plt.subplot(rows, cols, 5)
 plt.hist(npvs, bins=30, edgecolor='black')
+plt.yticks([])
 plt.xlabel('NPV ($ millions)')
 
 plt.subplot(rows, cols, 6)
 plt.hist(annualized_rois, bins=30, edgecolor='black')
+plt.yticks([])
 plt.xlabel('Annualized ROI (%)')
+
+plt.subplot(rows, cols, 7)
+plt.hist(npvs_remaining_development_years, bins=30, edgecolor='black')
+plt.yticks([])
+plt.xlabel('NPV ($ millions)')
+
+plt.subplot(rows, cols, 8)
+plt.hist(npvs_remaining_sales_years, bins=30, edgecolor='black')
+plt.yticks([])
+plt.xlabel('NPV ($ millions)')
+
+plt.subplot(rows, cols, 9)
+plt.hist(npvs_yearly_unit_sales, bins=30, edgecolor='black')
+plt.yticks([])
+plt.xlabel('NPV ($ millions)')
 
 plt.tight_layout()
 plt.show()
