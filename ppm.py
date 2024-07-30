@@ -1,6 +1,7 @@
 from enum import Enum
 import numpy as np # linear algebra library
 import matplotlib.pyplot as plt # plotting library
+import pandas as pd
 
 def pv(future_value, rate, periods):
     return future_value / (1 + rate) ** periods
@@ -14,16 +15,13 @@ class CompanyConstants:
         self.market_return = 0.03
         
         # how much it costs per person to run a product development team (in present dollars)
-        self.development_fte_cost_pv = 50000
+        self.yearly_development_fte_cost_pv = 50000
         
         # how much the cost of development increases each year
         self.development_cost_trend = 0.03
         
         # how much the cost of a product increases each year
         self.unit_cost_trend = 0.03
-        
-        # how much the selling price of a product increases each year
-        self.unit_price_trend = 0.03
         
         # the percentage of the selling price that is allocated to cover selling, general, and administrative expenses
         self.sga_percentage = 0.30
@@ -32,12 +30,12 @@ class ProductVariablesRanges:
     def __init__(self):
         # the number of people (full time equivalents) on the development team
         self.development_ftes = [4, 5, 6]
-        
-        # the number of remaining years to develop the product
-        self.remaining_development_years = [3, 4, 5]
-        
-        # the number of remaining years after development that the product will be sold
-        self.remaining_delay_years = [0, 1, 2]
+
+        # development years profile
+        self.years_before_development = 0
+        self.years_of_development_growth = 0
+        self.years_of_development_maturity = [3, 4, 5]
+        self.years_of_development_decline = 0
         
         # the number of people that need to keep working on the product after development
         self.maintenance_ftes = [0, 0.5, 1]
@@ -45,15 +43,18 @@ class ProductVariablesRanges:
         # the cost to manufacture one unit of the product (in present dollars)
         self.unit_cost_pv = [8000, 10000, 12000]
         
-        # the number of remaining years that the product is expected to be sold
-        self.remaining_sales_years = [8, 10, 12]
-
         # the selling price cost factors to compute the price of the product (in present dollars)
         self.unit_price_cost_factor = [1.9, 2.0, 2.1]
 
         # the number of units that are expected to be sold per year
         self.yearly_unit_sales_lowest_price = [110, 120, 130]
         self.yearly_unit_sales_highest_price = [70, 80, 90]
+
+        # sales years profile
+        self.years_before_sales = 1
+        self.years_of_sales_growth = 0
+        self.years_of_sales_maturity = [8, 10, 12]
+        self.years_of_sales_decline = 0
 
     def lowest_price(self):
         return self.unit_cost_pv[0] * self.unit_price_cost_factor[0]
@@ -62,32 +63,39 @@ class ProductVariablesRanges:
         return self.unit_cost_pv[2] * self.unit_price_cost_factor[2]
 
 def gen_t(a, tornado, key):
-    if(tornado == Tornado.OFF or key == tornado):
-        return np.random.triangular(a[0], a[1], a[2])
-    else:
-        return a[1]  
+    if isinstance(a, list):
+        if(tornado == Tornado.OFF or key == tornado):
+            return np.random.triangular(a[0], a[1], a[2])
+        else:
+            return a[1]  
+    else:   
+        return a
 
 class Tornado(Enum):
     OFF = 99
     Dev_Ftes = 0
     Dev_Years = 1
-    Delay_Years = 2
-    Maint_Ftes = 3
+    Maint_Ftes = 2
+    Sales_Years = 3
     Unit_Cost = 4
-    Sales_Years = 5
-    Margin = 6
-    Yearly_Sales = 7
+    Margin = 5
+    Yearly_Sales = 6
 
 class ProductVariablesSnapshot:
     def __init__(self, product_variables_ranges, tornado):
         
-        # convert range to actual value using a triangular distribution
+        # convert various ranges to actual value using a triangular distribution (or use the expected value if the tornado is on)
         self.development_ftes = gen_t(product_variables_ranges.development_ftes, tornado, Tornado.Dev_Ftes)
-        self.remaining_development_years = gen_t(product_variables_ranges.remaining_development_years, tornado, Tornado.Dev_Years)
-        self.remaining_delay_years = gen_t(product_variables_ranges.remaining_delay_years, tornado, Tornado.Delay_Years)
+        self.years_before_development = gen_t(product_variables_ranges.years_before_development, tornado, Tornado.OFF)
+        self.years_of_development_growth = gen_t(product_variables_ranges.years_of_development_growth, tornado, Tornado.OFF)
+        self.years_of_development_maturity = gen_t(product_variables_ranges.years_of_development_maturity, tornado, Tornado.Dev_Years)
+        self.years_of_development_decline = gen_t(product_variables_ranges.years_of_development_decline, tornado, Tornado.OFF)
         self.maintenance_ftes = gen_t(product_variables_ranges.maintenance_ftes, tornado, Tornado.Maint_Ftes)
+        self.years_before_sales = gen_t(product_variables_ranges.years_before_sales, tornado, Tornado.OFF)
+        self.years_of_sales_growth = gen_t(product_variables_ranges.years_of_sales_growth, tornado, Tornado.OFF)
+        self.years_of_sales_maturity = gen_t(product_variables_ranges.years_of_sales_maturity, tornado, Tornado.Sales_Years)
+        self.years_of_sales_decline = gen_t(product_variables_ranges.years_of_sales_decline, tornado, Tornado.OFF)
         self.unit_cost_pv = gen_t(product_variables_ranges.unit_cost_pv, tornado, Tornado.Unit_Cost)
-        self.remaining_sales_years = gen_t(product_variables_ranges.remaining_sales_years, tornado, Tornado.Sales_Years)
         self.unit_price_cost_factor = gen_t(product_variables_ranges.unit_price_cost_factor, tornado, Tornado.Margin)
 
         # compute the unit price
@@ -100,25 +108,57 @@ class ProductVariablesSnapshot:
             sales_range_i = np.array([product_variables_ranges.yearly_unit_sales_lowest_price[i], product_variables_ranges.yearly_unit_sales_highest_price[i]])
             yearly_unit_sales_range[i] = np.interp(self.unit_price_pv, price_range, sales_range_i)
         
-        # convert range to actual value using a triangular distribution
+        # convert the sales range to actual value using a triangular distribution
         self.yearly_unit_sales = gen_t(yearly_unit_sales_range, tornado, Tornado.Yearly_Sales)
 
     def total_remaining_years(self):
-        return self.remaining_development_years + self.remaining_delay_years + self.remaining_sales_years
+        return self.years_before_development + self.years_of_development_growth + self.years_of_development_maturity + self.years_of_development_decline + self.years_before_sales + self.years_of_sales_growth + self.years_of_sales_maturity + self.years_of_sales_decline
+    
+    def development_ftes_this_month(self, month):
+        if month < self.years_before_development * 12:
+            return 0
+        month -= self.years_before_development * 12
+        if month < self.years_of_development_growth * 12:
+            return self.development_ftes * month / (self.years_of_development_growth * 12)
+        month -= self.years_of_development_growth * 12
+        if month < self.years_of_development_maturity * 12:
+            return self.development_ftes
+        month -= self.years_of_development_maturity * 12
+        if month < self.years_of_development_decline * 12:
+            return self.development_ftes * (1 - month / (self.years_of_development_decline * 12))
+        return self.maintenance_ftes
+    
+    def sales_this_month(self, month):
+        month -= self.years_before_development * 12
+        month -= self.years_of_development_growth * 12
+        month -= self.years_of_development_maturity * 12
+        month -= self.years_of_development_decline * 12
+        if month < self.years_before_sales * 12:
+            return 0
+        month -= self.years_before_sales * 12
+        if month < self.years_of_sales_growth * 12:
+            return self.yearly_unit_sales * month / (self.years_of_sales_growth * 12) / 12
+        month -= self.years_of_sales_growth * 12
+        if month < self.years_of_sales_maturity * 12:
+            return self.yearly_unit_sales / 12
+        month -= self.years_of_sales_maturity * 12
+        if month < self.years_of_sales_decline * 12:
+            return self.yearly_unit_sales * (1 - month / (self.years_of_sales_decline * 12)) / 12
+        return 0
 
 class NpvCalculationResult:
     def __init__(self):
-        self.future_development_cost = 0
-        self.future_sales = 0
-        self.future_cost_of_goods = 0
-        self.future_sga = 0
-        self.future_unit_sales = 0
+        self.development_cost = 0
+        self.sales = 0
+        self.cost_of_goods = 0
+        self.sga = 0
+        self.unit_sales = 0
 
     def npv(self):
-        return self.future_sales - self.future_cost_of_goods - self.future_sga - self.future_development_cost
+        return self.sales - self.cost_of_goods - self.sga - self.development_cost
 
     def roi(self):
-        return self.npv() / self.future_development_cost
+        return self.npv() / self.development_cost
 
     def annualized_roi(self, years):
         return (1 + self.roi()) ** (1 / years) - 1
@@ -128,41 +168,29 @@ def calculate_npv(product_variables_snapshot, company_constants):
     # this is what we will calculate and return 
     result = NpvCalculationResult()
 
-    # DEVELOPMENT COSTS
-    year = product_variables_snapshot.remaining_development_years / 2
-
-    # compute the future value of the cost of development for this year
-    development_cost_fte_fv = fv(company_constants.development_fte_cost_pv, company_constants.development_cost_trend, year)
-
-    # add the cost of development
-    result.future_development_cost += pv(development_cost_fte_fv * product_variables_snapshot.development_ftes * product_variables_snapshot.remaining_development_years, company_constants.market_return, year)
-
-    # DELAY COSTS
-    year = product_variables_snapshot.remaining_development_years + product_variables_snapshot.remaining_delay_years / 2
-
-    # compute the future value of the cost of development for this year
-    development_cost_fte_fv = fv(company_constants.development_fte_cost_pv, company_constants.development_cost_trend, year)
-
-    # add the cost of development
-    result.future_development_cost += pv(development_cost_fte_fv * product_variables_snapshot.maintenance_ftes * product_variables_snapshot.remaining_delay_years, company_constants.market_return, year)
-
-    # SALES
-    year = product_variables_snapshot.remaining_development_years + product_variables_snapshot.remaining_delay_years + product_variables_snapshot.remaining_sales_years / 2
-
-    # compute the future value of the selling price, unit cost, and cost of development for this year
-    unit_price_fv = fv(product_variables_snapshot.unit_price_pv, company_constants.unit_price_trend, year)
-    unit_cost_fv = fv(product_variables_snapshot.unit_cost_pv, company_constants.unit_cost_trend, year)
-    development_cost_fte_fv = fv(company_constants.development_fte_cost_pv, company_constants.development_cost_trend, year)
+    # phase: development maturity
+    for month in range(round(product_variables_snapshot.total_remaining_years() * 12)):
     
-    # compute the selling, general, and administrative expenses per unit
-    sga_fv = unit_price_fv * company_constants.sga_percentage
+        # compute the development_ftes for this month
+        development_ftes = product_variables_snapshot.development_ftes_this_month(month)
 
-    # record unit sales, costs of development, sales, cost of goods, sga
-    result.future_unit_sales = product_variables_snapshot.yearly_unit_sales * product_variables_snapshot.remaining_sales_years
-    result.future_development_cost += pv(development_cost_fte_fv * product_variables_snapshot.maintenance_ftes * product_variables_snapshot.remaining_sales_years, company_constants.market_return, year)
-    result.future_sales = pv(unit_price_fv * product_variables_snapshot.yearly_unit_sales * product_variables_snapshot.remaining_sales_years, company_constants.market_return, year)
-    result.future_cost_of_goods = pv(unit_cost_fv * product_variables_snapshot.yearly_unit_sales * product_variables_snapshot.remaining_sales_years, company_constants.market_return, year)
-    result.future_sga = pv(sga_fv * product_variables_snapshot.yearly_unit_sales * product_variables_snapshot.remaining_sales_years, company_constants.market_return, year)
+        # compute the unit sales for this month
+        unit_sales = product_variables_snapshot.sales_this_month(month)
+
+        # compute the future value of the cost of development, unit cost, and unit price for this month
+        monthly_development_cost_fte_fv = fv(company_constants.yearly_development_fte_cost_pv / 12, company_constants.development_cost_trend / 12, month)
+        unit_cost_fv = fv(product_variables_snapshot.unit_cost_pv, company_constants.unit_cost_trend / 12, month)
+        unit_price_fv = fv(product_variables_snapshot.unit_price_pv, company_constants.unit_cost_trend * product_variables_snapshot.unit_price_cost_factor / 12, month)
+
+        # compute the selling, general, and administrative expenses per unit
+        sga_fv = unit_price_fv * company_constants.sga_percentage
+
+        # add the cost of development in present value terms
+        result.development_cost += pv(development_ftes * monthly_development_cost_fte_fv, company_constants.market_return / 12, month)
+        result.unit_sales += unit_sales
+        result.sales += pv(unit_sales * unit_price_fv, company_constants.market_return / 12, month)
+        result.cost_of_goods += pv(unit_sales * unit_cost_fv, company_constants.market_return / 12, month)
+        result.sga += pv(unit_sales * sga_fv, company_constants.market_return / 12, month)
 
     return result
 
@@ -198,10 +226,10 @@ for i in range(10000):
     product_variables_snapshot = ProductVariablesSnapshot(product_variables_ranges, Tornado.OFF)
     result = calculate_npv(product_variables_snapshot, company_constants)
     npvs.append(result.npv()/1000000)
-    development_costs.append(result.future_development_cost/1000000)
+    development_costs.append(result.development_cost/1000000)
     annualized_rois.append(result.annualized_roi(product_variables_snapshot.total_remaining_years())*100)
-    unit_sales.append(result.future_unit_sales)
-    sales.append(result.future_sales/1000000)
+    unit_sales.append(result.unit_sales)
+    sales.append(result.sales/1000000)
     years.append(product_variables_snapshot.total_remaining_years())
 
     # loop through all the tornado variables
