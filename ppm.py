@@ -51,7 +51,7 @@ class ProductVariablesRanges:
         self.yearly_unit_sales_highest_price = [70, 80, 90]
 
         # sales years profile
-        self.years_before_sales = 1
+        self.years_before_sales = 0
         self.years_of_sales_growth = 0
         self.years_of_sales_maturity = [8, 10, 12]
         self.years_of_sales_decline = 0
@@ -168,7 +168,7 @@ def calculate_npv(product_variables_snapshot, company_constants):
     # this is what we will calculate and return 
     result = NpvCalculationResult()
 
-    # phase: development maturity
+    # loop through all the months
     for month in range(round(product_variables_snapshot.total_remaining_years() * 12)):
     
         # compute the development_ftes for this month
@@ -222,7 +222,7 @@ tornado_trackers = {}
 for tornado in Tornado:
     tornado_trackers[tornado] = TornadoTracker()
 
-for i in range(10000):
+for i in range(1000):
     product_variables_snapshot = ProductVariablesSnapshot(product_variables_ranges, Tornado.OFF)
     result = calculate_npv(product_variables_snapshot, company_constants)
     npvs.append(result.npv()/1000000)
@@ -263,7 +263,7 @@ plt.xlabel('Development ($ millions)')
 # plt.subplot(rows, cols, 4)
 # plt.hist(years, bins=30, edgecolor='black')
 # plt.yticks([])
-# plt.xlabel('Total Remaining Years')
+# plt.xlabel('Product Years')
 
 plt.subplot(rows, cols, 4)
 plt.hist(npvs, bins=30, edgecolor='black')
