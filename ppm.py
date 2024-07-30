@@ -62,7 +62,7 @@ class ProductVariablesRanges:
     def highest_price(self):
         return self.unit_cost_pv[2] * self.unit_price_cost_factor[2]
 
-def gen_t(a, tornado, key):
+def triangle(a, tornado, key):
     if isinstance(a, list):
         if(tornado == Tornado.OFF or key == tornado):
             return np.random.triangular(a[0], a[1], a[2])
@@ -85,18 +85,18 @@ class ProductVariablesSnapshot:
     def __init__(self, product_variables_ranges, tornado):
         
         # convert various ranges to actual value using a triangular distribution (or use the expected value if the tornado is on)
-        self.development_ftes = gen_t(product_variables_ranges.development_ftes, tornado, Tornado.Dev_Ftes)
-        self.years_before_development = gen_t(product_variables_ranges.years_before_development, tornado, Tornado.OFF)
-        self.years_of_development_growth = gen_t(product_variables_ranges.years_of_development_growth, tornado, Tornado.OFF)
-        self.years_of_development_maturity = gen_t(product_variables_ranges.years_of_development_maturity, tornado, Tornado.Dev_Years)
-        self.years_of_development_decline = gen_t(product_variables_ranges.years_of_development_decline, tornado, Tornado.OFF)
-        self.maintenance_ftes = gen_t(product_variables_ranges.maintenance_ftes, tornado, Tornado.Maint_Ftes)
-        self.years_before_sales = gen_t(product_variables_ranges.years_before_sales, tornado, Tornado.OFF)
-        self.years_of_sales_growth = gen_t(product_variables_ranges.years_of_sales_growth, tornado, Tornado.OFF)
-        self.years_of_sales_maturity = gen_t(product_variables_ranges.years_of_sales_maturity, tornado, Tornado.Sales_Years)
-        self.years_of_sales_decline = gen_t(product_variables_ranges.years_of_sales_decline, tornado, Tornado.OFF)
-        self.unit_cost_pv = gen_t(product_variables_ranges.unit_cost_pv, tornado, Tornado.Unit_Cost)
-        self.unit_price_cost_factor = gen_t(product_variables_ranges.unit_price_cost_factor, tornado, Tornado.Margin)
+        self.development_ftes = triangle(product_variables_ranges.development_ftes, tornado, Tornado.Dev_Ftes)
+        self.years_before_development = triangle(product_variables_ranges.years_before_development, tornado, Tornado.OFF)
+        self.years_of_development_growth = triangle(product_variables_ranges.years_of_development_growth, tornado, Tornado.OFF)
+        self.years_of_development_maturity = triangle(product_variables_ranges.years_of_development_maturity, tornado, Tornado.Dev_Years)
+        self.years_of_development_decline = triangle(product_variables_ranges.years_of_development_decline, tornado, Tornado.OFF)
+        self.maintenance_ftes = triangle(product_variables_ranges.maintenance_ftes, tornado, Tornado.Maint_Ftes)
+        self.years_before_sales = triangle(product_variables_ranges.years_before_sales, tornado, Tornado.OFF)
+        self.years_of_sales_growth = triangle(product_variables_ranges.years_of_sales_growth, tornado, Tornado.OFF)
+        self.years_of_sales_maturity = triangle(product_variables_ranges.years_of_sales_maturity, tornado, Tornado.Sales_Years)
+        self.years_of_sales_decline = triangle(product_variables_ranges.years_of_sales_decline, tornado, Tornado.OFF)
+        self.unit_cost_pv = triangle(product_variables_ranges.unit_cost_pv, tornado, Tornado.Unit_Cost)
+        self.unit_price_cost_factor = triangle(product_variables_ranges.unit_price_cost_factor, tornado, Tornado.Margin)
 
         # compute the unit price
         self.unit_price_pv = self.unit_cost_pv * self.unit_price_cost_factor
@@ -109,7 +109,7 @@ class ProductVariablesSnapshot:
             yearly_unit_sales_range[i] = np.interp(self.unit_price_pv, price_range, sales_range_i)
         
         # convert the sales range to actual value using a triangular distribution
-        self.yearly_unit_sales = gen_t(yearly_unit_sales_range, tornado, Tornado.Yearly_Sales)
+        self.yearly_unit_sales = triangle(yearly_unit_sales_range, tornado, Tornado.Yearly_Sales)
 
     def total_remaining_years(self):
         return self.years_before_development + self.years_of_development_growth + self.years_of_development_maturity + self.years_of_development_decline + self.years_before_sales + self.years_of_sales_growth + self.years_of_sales_maturity + self.years_of_sales_decline
