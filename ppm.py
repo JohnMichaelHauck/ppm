@@ -195,7 +195,8 @@ def calculate_npv(product_variables_snapshot, company_constants):
     return result
 
 class TornadoTracker:
-    def __init__(self):
+    def __init__(self, name):
+        self.name = name
         self.min_value = float('inf')
         self.max_value = float('-inf')
 
@@ -218,11 +219,12 @@ unit_sales = []
 sales = []
 years = []
 
-tornado_trackers = {}
+tornado_trackers = []
 for tornado in Tornado:
-    tornado_trackers[tornado] = TornadoTracker()
+    if(tornado != Tornado.OFF):
+        tornado_trackers.append(TornadoTracker(tornado.name))
 
-for i in range(1000):
+for i in range(10000):
     product_variables_snapshot = ProductVariablesSnapshot(product_variables_ranges, Tornado.OFF)
     result = calculate_npv(product_variables_snapshot, company_constants)
     npvs.append(result.npv()/1000000)
@@ -237,7 +239,10 @@ for i in range(1000):
         if(tornado != Tornado.OFF):
             product_variables_snapshot = ProductVariablesSnapshot(product_variables_ranges, tornado)
             result = calculate_npv(product_variables_snapshot, company_constants)
-            tornado_trackers[tornado].add(result.npv()/1000000)
+            tornado_trackers[tornado.value].add(result.npv()/1000000)
+
+# Sort the tornado trackers by range
+tornado_trackers.sort(key=lambda x: x.range())
 
 # Plotting
 plt.figure(figsize=(10, 5))
@@ -276,10 +281,11 @@ plt.yticks([])
 plt.xlabel('Annualized ROI (%)')
 
 plt.subplot(rows, cols, 6)
-tornado_names = [tornado.name for tornado in Tornado]
-range_values = [tornado_trackers[tornado].range() for tornado in Tornado]
-plt.barh(tornado_names, range_values)
-plt.xlabel('NPV Range ($ millions)')
+tornado_names = [tornado_tracker.name for tornado_tracker in tornado_trackers]
+tornado_ranges = [tornado_tracker.range() for tornado_tracker in tornado_trackers]
+tornado_min_values = [tornado_tracker.min_value for tornado_tracker in tornado_trackers]
+plt.barh(tornado_names, tornado_ranges, left = tornado_min_values)
+plt.xlabel('NPV Sensitivity ($ millions)')
 
 plt.tight_layout()
 plt.show()
