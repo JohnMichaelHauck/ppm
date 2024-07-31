@@ -153,6 +153,7 @@ class NpvCalculationResult:
         self.cost_of_goods = 0
         self.sga = 0
         self.unit_sales = 0
+        self.total_remaining_years = 0
 
     def npv(self):
         return self.sales - self.cost_of_goods - self.sga - self.development_cost
@@ -192,10 +193,31 @@ def calculate_npv(product_variables_snapshot, company_constants):
         result.cost_of_goods += pv(unit_sales * unit_cost_fv, company_constants.market_return / 12, month)
         result.sga += pv(unit_sales * sga_fv, company_constants.market_return / 12, month)
 
+    # handy for the result
+    result.total_remaining_years = product_variables_snapshot.total_remaining_years
+
     return result
 
+class SimulationTracker:
+    def __init__(self):
+        self.npvs = []
+        self.development_costs = []
+        self.annualized_rois = []
+        self.unit_sales = []
+        self.sales = []
+        self.years = []
+    
+    def add(self, result):
+        self.npvs.append(result.npv() / 1000000)
+        self.development_costs.append(result.development_cost / 1000000)
+        self.annualized_rois.append(result.annualized_roi(result.total_remaining_years) * 100)
+        self.unit_sales.append(result.unit_sales)
+        self.sales.append(result.sales / 1000000)
+        self.years.append(result.total_remaining_years)
+
 class TornadoTracker:
-    def __init__(self, name):
+    def __init__(self, tornado, name):
+        self.tornado = tornado
         self.name = name
         self.min_value = float('inf')
         self.max_value = float('-inf')
@@ -213,85 +235,62 @@ class PpmMonteCarlo:
     def __init__(self):
         self.company_constants = CompanyConstants()
         self.product_variables_ranges = ProductVariablesRanges()
-        self.npvs = []
-        self.annualized_rois = []
-        self.development_costs = []
-        self.unit_sales = []
-        self.sales = []
-        self.years = []
+        self.simulation_tracker = SimulationTracker()
         self.tornado_trackers = []
-        for tornado in Tornado:
-            if(tornado != Tornado.OFF):
-                self.tornado_trackers.append(TornadoTracker(tornado.name))
+        self.tornado_trackers.append(TornadoTracker(Tornado.Dev_Ftes, 'Dev FTEs'))
+        self.tornado_trackers.append(TornadoTracker(Tornado.Dev_Years, 'Dev Years'))
+        self.tornado_trackers.append(TornadoTracker(Tornado.Maint_Ftes, 'Maint FTEs'))
+        self.tornado_trackers.append(TornadoTracker(Tornado.Sales_Years, 'Sales Years'))
+        self.tornado_trackers.append(TornadoTracker(Tornado.Unit_Cost, 'Unit Cost'))
+        self.tornado_trackers.append(TornadoTracker(Tornado.Margin, 'Margin'))
+        self.tornado_trackers.append(TornadoTracker(Tornado.Yearly_Sales, 'Yearly Sales'))
 
     def analyze(self):
         # compute the monte carlo analysis
         for i in range(1000):
             product_variables_snapshot = ProductVariablesSnapshot(self.product_variables_ranges, Tornado.OFF)
             result = calculate_npv(product_variables_snapshot, self.company_constants)
-            self.npvs.append(result.npv() / 1000000)
-            self.development_costs.append(result.development_cost / 1000000)
-            self.annualized_rois.append(result.annualized_roi(product_variables_snapshot.total_remaining_years) * 100)
-            self.unit_sales.append(result.unit_sales)
-            self.sales.append(result.sales / 1000000)
-            self.years.append(product_variables_snapshot.total_remaining_years)
+            self.simulation_tracker.add(result)
 
         # compute the tornado analysis
         for i in range(100):    
-            for tornado in Tornado:
-                if(tornado != Tornado.OFF):
-                    product_variables_snapshot = ProductVariablesSnapshot(self.product_variables_ranges, tornado)
-                    result = calculate_npv(product_variables_snapshot, self.company_constants)
-                    self.tornado_trackers[tornado.value].add(result.npv() / 1000000)
+            for tornado_tracker in self.tornado_trackers:
+                product_variables_snapshot = ProductVariablesSnapshot(self.product_variables_ranges, tornado_tracker.tornado)
+                result = calculate_npv(product_variables_snapshot, self.company_constants)
+                tornado_tracker.add(result.npv() / 1000000)
 
         # Sort the tornado trackers by range
         self.tornado_trackers.sort(key=lambda x: x.range())
     
-    # Plotting
-    def plot(self):
+    # create a histogram
+    def create_histogram(self, data, bins, xlabel, subplot_position, rows, cols):
+        plt.subplot(rows, cols, subplot_position)
+        plt.hist(data, bins=bins, edgecolor='black')
+        plt.yticks([])
+        plt.xlabel(xlabel)
 
+    # create a tornado plot
+    def create_tornado_plot(self, names, ranges, min_values, xlabel, subplot_position, rows, cols):
+        plt.subplot(rows, cols, subplot_position)
+        plt.barh(names, ranges, left=min_values)
+        plt.xlabel(xlabel)
+
+    def plot(self):
         rows = 2
         cols = 3
-
-        # Plotting
         plt.figure(figsize=(10, 5))
 
-        plt.subplot(rows, cols, 1)
-        plt.hist(self.unit_sales, bins=30, edgecolor='black')
-        plt.yticks([])
-        plt.xlabel('Sales (units)')
+        self.create_histogram(self.simulation_tracker.unit_sales, 30, 'Sales (units)', 1, rows, cols)
+        self.create_histogram(self.simulation_tracker.sales, 30, 'Sales ($ millions)', 2, rows, cols)
+        self.create_histogram(self.simulation_tracker.development_costs, 30, 'Development ($ millions)', 3, rows, cols)
+        self.create_histogram(self.simulation_tracker.npvs, 30, 'NPV ($ millions)', 4, rows, cols)
+        self.create_histogram(self.simulation_tracker.annualized_rois, 30, 'Annualized ROI (%)', 5, rows, cols)
+        # self.create_histogram(self.years, 30, 'Product Years', 6, rows, cols)
 
-        plt.subplot(rows, cols, 2)
-        plt.hist(self.sales, bins=30, edgecolor='black')
-        plt.yticks([])
-        plt.xlabel('Sales ($ millions)')
-
-        plt.subplot(rows, cols, 3)
-        plt.hist(self.development_costs, bins=30, edgecolor='black')
-        plt.yticks([])
-        plt.xlabel('Development ($ millions)')
-
-        # plt.subplot(rows, cols, 4)
-        # plt.hist(years, bins=30, edgecolor='black')
-        # plt.yticks([])
-        # plt.xlabel('Product Years')
-
-        plt.subplot(rows, cols, 4)
-        plt.hist(self.npvs, bins=30, edgecolor='black')
-        plt.yticks([])
-        plt.xlabel('NPV ($ millions)')
-
-        plt.subplot(rows, cols, 5)
-        plt.hist(self.annualized_rois, bins=30, edgecolor='black')
-        plt.yticks([])
-        plt.xlabel('Annualized ROI (%)')
-
-        plt.subplot(rows, cols, 6)
         tornado_names = [tornado_tracker.name for tornado_tracker in self.tornado_trackers]
         tornado_ranges = [tornado_tracker.range() for tornado_tracker in self.tornado_trackers]
         tornado_min_values = [tornado_tracker.min_value for tornado_tracker in self.tornado_trackers]
-        plt.barh(tornado_names, tornado_ranges, left = tornado_min_values)
-        plt.xlabel('NPV Sensitivity ($ millions)')
+        self.create_tornado_plot(tornado_names, tornado_ranges, tornado_min_values, 'NPV Sensitivity ($ millions)', 6, rows, cols)
 
         plt.tight_layout()
         plt.show()
