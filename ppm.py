@@ -1,7 +1,7 @@
 from enum import Enum
 import numpy as np # linear algebra library
 import matplotlib.pyplot as plt # plotting library
-import pandas as pd
+import pandas as pd # data processing library
 
 def pv(future_value, rate, periods):
     return future_value / (1 + rate) ** periods
@@ -10,51 +10,52 @@ def fv(present_value, rate, periods):
     return present_value * (1 + rate) ** periods
 
 class CompanyConstants:
-    def __init__(self):
+    def __init__(self, market_return = 0.03, yearly_development_fte_cost_pv = 50000, development_cost_trend = 0.03, unit_cost_trend = 0.03, sga_percentage = 0.30):
+        
         # what we would expect to earn on an investment in a financial market with a similar risk
-        self.market_return = 0.03
+        self.market_return = market_return
         
         # how much it costs per person to run a product development team (in present dollars)
-        self.yearly_development_fte_cost_pv = 50000
+        self.yearly_development_fte_cost_pv = yearly_development_fte_cost_pv
         
         # how much the cost of development increases each year
-        self.development_cost_trend = 0.03
-        
+        self.development_cost_trend = development_cost_trend
+
         # how much the cost of a product increases each year
-        self.unit_cost_trend = 0.03
-        
-        # the percentage of the selling price that is allocated to cover selling, general, and administrative expenses
-        self.sga_percentage = 0.30
+        self.unit_cost_trend = unit_cost_trend
+
+        # the percentage of the selling price that is allocated to cover selling, general, and administrative expenses        
+        self.sga_percentage = sga_percentage
 
 class ProductVariablesRanges:
-    def __init__(self):
+    def __init__(self, years_before_development=1.5, years_of_development_growth=0, years_of_development_maturity=[3, 4, 5], years_of_development_decline=0, years_before_sales=0, years_of_sales_growth=0, years_of_sales_maturity=[8, 10, 12], years_of_sales_decline=0, development_ftes=[4, 5, 6], maintenance_ftes=[0, 0.5, 1], unit_cost_pv=[8000, 10000, 12000], unit_price_cost_factor=[1.9, 2.0, 2.1], yearly_unit_sales_lowest_price=[110, 120, 130], yearly_unit_sales_highest_price=[70, 80, 90]):
         # development years profile
-        self.years_before_development = 1.5
-        self.years_of_development_growth = 0
-        self.years_of_development_maturity = [3, 4, 5]
-        self.years_of_development_decline = 0
+        self.years_before_development = years_before_development
+        self.years_of_development_growth = years_of_development_growth
+        self.years_of_development_maturity = years_of_development_maturity
+        self.years_of_development_decline = years_of_development_decline
 
         # sales years profile
-        self.years_before_sales = 0
-        self.years_of_sales_growth = 0
-        self.years_of_sales_maturity = [8, 10, 12]
-        self.years_of_sales_decline = 0
+        self.years_before_sales = years_before_sales
+        self.years_of_sales_growth = years_of_sales_growth
+        self.years_of_sales_maturity = years_of_sales_maturity
+        self.years_of_sales_decline = years_of_sales_decline
         
         # the number of people (full time equivalents) on the development team
-        self.development_ftes = [4, 5, 6]
+        self.development_ftes = development_ftes
 
         # the number of people that need to keep working on the product after development
-        self.maintenance_ftes = [0, 0.5, 1]
+        self.maintenance_ftes = maintenance_ftes
         
         # the cost to manufacture one unit of the product (in present dollars)
-        self.unit_cost_pv = [8000, 10000, 12000]
+        self.unit_cost_pv = unit_cost_pv
         
         # the selling price cost factors to compute the price of the product (in present dollars)
-        self.unit_price_cost_factor = [1.9, 2.0, 2.1]
+        self.unit_price_cost_factor = unit_price_cost_factor
 
         # the number of units that are expected to be sold per year
-        self.yearly_unit_sales_lowest_price = [110, 120, 130]
-        self.yearly_unit_sales_highest_price = [70, 80, 90]
+        self.yearly_unit_sales_lowest_price = yearly_unit_sales_lowest_price
+        self.yearly_unit_sales_highest_price = yearly_unit_sales_highest_price
 
     def lowest_price(self):
         return self.unit_cost_pv[0] * self.unit_price_cost_factor[0]
@@ -63,13 +64,10 @@ class ProductVariablesRanges:
         return self.unit_cost_pv[2] * self.unit_price_cost_factor[2]
 
 def triangle(a, tornado, key):
-    if isinstance(a, list):
-        if(tornado == Tornado.OFF or key == tornado):
-            return np.random.triangular(a[0], a[1], a[2])
-        else:
-            return a[1]  
-    else:   
-        return a
+    if(a[0] != a[2] and (tornado == Tornado.OFF or key == tornado)):
+        return np.random.triangular(a[0], a[1], a[2])
+    else:
+        return a[1]
 
 class Tornado(Enum):
     OFF = 99
@@ -232,9 +230,9 @@ class TornadoTracker:
         return self.max_value - self.min_value
 
 class PpmMonteCarlo:
-    def __init__(self):
-        self.company_constants = CompanyConstants()
-        self.product_variables_ranges = ProductVariablesRanges()
+    def __init__(self, company_constants, product_variables_ranges):
+        self.company_constants = company_constants
+        self.product_variables_ranges = product_variables_ranges
         self.simulation_tracker = SimulationTracker()
         self.tornado_trackers = []
         self.tornado_trackers.append(TornadoTracker(Tornado.Dev_Ftes, 'Dev FTEs'))
@@ -247,7 +245,7 @@ class PpmMonteCarlo:
 
     def analyze(self):
         # compute the monte carlo analysis
-        for i in range(1000):
+        for i in range(2000):
             product_variables_snapshot = ProductVariablesSnapshot(self.product_variables_ranges, Tornado.OFF)
             result = calculate_npv(product_variables_snapshot, self.company_constants)
             self.simulation_tracker.add(result)
@@ -295,7 +293,55 @@ class PpmMonteCarlo:
         plt.tight_layout()
         plt.show()
 
+def read_excel_data(file_path):
+    # Read the Excel file
+    dfs = pd.read_excel(file_path, sheet_name=None)
+
+    # Read the "Company Constants" sheet
+    company_constants_df = dfs['Company Constants']
+
+    # Extract values from the DataFrame
+    market_return = company_constants_df.iloc[0, 1]
+    yearly_development_fte_cost_pv = company_constants_df.iloc[1, 1]
+    development_cost_trend = company_constants_df.iloc[2, 1]
+    unit_cost_trend = company_constants_df.iloc[3, 1]
+    sga_percentage = company_constants_df.iloc[4, 1]
+
+    # Initialize the CompanyConstants instance
+    company_constants = CompanyConstants(market_return, yearly_development_fte_cost_pv, development_cost_trend, unit_cost_trend, sga_percentage)
+
+    # Read the "Product Variables" sheet
+    product_variables_df = dfs['Product Variables']
+
+    def convert(df, row):
+        return [df.iloc[row, 1], df.iloc[row, 2], df.iloc[row, 3]]
+
+    # Extract values from the DataFrame
+    years_before_development = convert(product_variables_df, 0)
+    years_of_development_growth = convert(product_variables_df, 1)
+    years_of_development_maturity = convert(product_variables_df, 2)
+    years_of_development_decline = convert(product_variables_df, 3)
+    years_before_sales = convert(product_variables_df, 4)
+    years_of_sales_growth = convert(product_variables_df, 5)
+    years_of_sales_maturity = convert(product_variables_df, 6)
+    years_of_sales_decline = convert(product_variables_df, 7)
+    development_ftes = convert(product_variables_df, 8)
+    maintenance_ftes = convert(product_variables_df, 9)
+    unit_cost_pv = convert(product_variables_df, 10)
+    unit_price_cost_factor = convert(product_variables_df, 11)
+    yearly_unit_sales_at_15200 = convert(product_variables_df, 12)
+    yearly_unit_sales_at_25200 = convert(product_variables_df, 13)
+
+    # Initialize the ProductVariablesRanges instance
+    product_variables_ranges = ProductVariablesRanges(years_before_development, years_of_development_growth, years_of_development_maturity, years_of_development_decline, years_before_sales, years_of_sales_growth, years_of_sales_maturity, years_of_sales_decline, development_ftes, maintenance_ftes, unit_cost_pv, unit_price_cost_factor, yearly_unit_sales_at_15200, yearly_unit_sales_at_25200)
+
+    return company_constants, product_variables_ranges
+
+# load in the values
+file_path = r'C:\Users\John_Hauck\OneDrive - LECO Corporation\ppm.xlsx'
+company_constants, product_variables_ranges = read_excel_data(file_path)
+
 # Run the Monte Carlo simulation
-monte_carlo = PpmMonteCarlo()
+monte_carlo = PpmMonteCarlo(company_constants, product_variables_ranges)
 monte_carlo.analyze()
 monte_carlo.plot()
