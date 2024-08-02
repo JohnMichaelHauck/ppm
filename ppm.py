@@ -1,7 +1,8 @@
 from enum import Enum
 import numpy as np # linear algebra library
 import matplotlib.pyplot as plt # plotting library
-import pandas as pd # data processing library
+from openpyxl import load_workbook
+from openpyxl.drawing.image import Image
 
 def pv(future_value, rate, periods):
     return future_value / (1 + rate) ** periods
@@ -270,7 +271,7 @@ class PpmMonteCarlo:
         plt.barh(names, ranges, left=min_values)
         plt.xlabel(xlabel)
 
-    def plot(self):
+    def plot(self, file_path):
         rows = 2
         cols = 3
         plt.figure(figsize=(10, 5))
@@ -288,56 +289,77 @@ class PpmMonteCarlo:
         self.create_tornado_plot(tornado_names, tornado_ranges, tornado_min_values, 'NPV Sensitivity ($ millions)', 6, rows, cols)
 
         plt.tight_layout()
-        plt.show()
+        plt.savefig(file_path)
+        plt.close()
 
 def read_excel_data(file_path):
-    # Read the Excel file
-    dfs = pd.read_excel(file_path, sheet_name=None)
 
-    # Read the "Company Constants" sheet
-    company_constants_df = dfs['Company Constants']
+    # Load the workbook and select the sheets
+    workbook = load_workbook(file_path)
+    company_constants_sheet = workbook['Company Constants']
+    product_variables_sheet = workbook['Product Variables']
 
     # Extract values from the DataFrame
-    market_return = company_constants_df.iloc[0, 1]
-    yearly_development_fte_cost_pv = company_constants_df.iloc[1, 1]
-    inflation = company_constants_df.iloc[2, 1]
-    sga_percentage = company_constants_df.iloc[3, 1]
+    market_return = company_constants_sheet.cell(row=2, column=2).value
+    yearly_development_fte_cost_pv = company_constants_sheet.cell(row=3, column=2).value
+    inflation = company_constants_sheet.cell(row=4, column=2).value
+    sga_percentage = company_constants_sheet.cell(row=5, column=2).value
 
     # Initialize the CompanyConstants instance
     company_constants = CompanyConstants(market_return, yearly_development_fte_cost_pv, inflation, sga_percentage)
 
-    # Read the "Product Variables" sheet
-    product_variables_df = dfs['Product Variables']
-
-    def convert(df, row):
-        return [df.iloc[row, 1], df.iloc[row, 2], df.iloc[row, 3]]
-
+    def convert(sheet, row):
+        return [
+            sheet.cell(row=row, column=2).value,
+            sheet.cell(row=row, column=3).value,
+            sheet.cell(row=row, column=4).value
+        ]
+    
     # Extract values from the DataFrame
-    years_before_development = convert(product_variables_df, 0)
-    years_of_development_growth = convert(product_variables_df, 1)
-    years_of_development_maturity = convert(product_variables_df, 2)
-    years_of_development_decline = convert(product_variables_df, 3)
-    years_before_sales = convert(product_variables_df, 4)
-    years_of_sales_growth = convert(product_variables_df, 5)
-    years_of_sales_maturity = convert(product_variables_df, 6)
-    years_of_sales_decline = convert(product_variables_df, 7)
-    development_ftes = convert(product_variables_df, 8)
-    maintenance_ftes = convert(product_variables_df, 9)
-    unit_cost_pv = convert(product_variables_df, 10)
-    unit_price_cost_factor = convert(product_variables_df, 11)
-    yearly_unit_sales_at_15200 = convert(product_variables_df, 12)
-    yearly_unit_sales_at_25200 = convert(product_variables_df, 13)
+    years_before_development = convert(product_variables_sheet, 2)
+    years_of_development_growth = convert(product_variables_sheet, 3)
+    years_of_development_maturity = convert(product_variables_sheet, 4)
+    years_of_development_decline = convert(product_variables_sheet, 5)
+    years_before_sales = convert(product_variables_sheet, 6)
+    years_of_sales_growth = convert(product_variables_sheet, 7)
+    years_of_sales_maturity = convert(product_variables_sheet, 8)
+    years_of_sales_decline = convert(product_variables_sheet, 9)
+    development_ftes = convert(product_variables_sheet, 10)
+    maintenance_ftes = convert(product_variables_sheet, 11)
+    unit_cost_pv = convert(product_variables_sheet, 12)
+    unit_price_cost_factor = convert(product_variables_sheet, 13)
+    yearly_unit_sales_at_15200 = convert(product_variables_sheet, 14)
+    yearly_unit_sales_at_25200 = convert(product_variables_sheet, 15)
 
     # Initialize the ProductVariablesRanges instance
     product_variables_ranges = ProductVariablesRanges(years_before_development, years_of_development_growth, years_of_development_maturity, years_of_development_decline, years_before_sales, years_of_sales_growth, years_of_sales_maturity, years_of_sales_decline, development_ftes, maintenance_ftes, unit_cost_pv, unit_price_cost_factor, yearly_unit_sales_at_15200, yearly_unit_sales_at_25200)
 
     return company_constants, product_variables_ranges
 
+def insert_plot_into_excel(excel_file_path_in, excel_file_path_out, image_path):
+    # Load the workbook and select the sheet
+    workbook = load_workbook(excel_file_path_in)
+    sheet = workbook['Product Variables']
+
+    # Load the image
+    img = Image(image_path)
+    
+    # Insert the image into the sheet at the specified cell
+    sheet.add_image(img, 'A16')
+
+    # Save the workbook to the new file
+    workbook.save(excel_file_path_out)
+
 # load in the values
-file_path = r'C:\Users\John_Hauck\OneDrive - LECO Corporation\ppm.xlsx'
-company_constants, product_variables_ranges = read_excel_data(file_path)
+excel_file_path_in = r'C:\Users\John_Hauck\OneDrive - LECO Corporation\ppm.xlsx'
+excel_file_path_out = r'C:\Users\John_Hauck\OneDrive - LECO Corporation\ppm.xlsx'
+plot_file_path = r'C:\Users\John_Hauck\Downloads\ppm.png'
+company_constants, product_variables_ranges = read_excel_data(excel_file_path_in)
 
 # Run the Monte Carlo simulation
 monte_carlo = PpmMonteCarlo(company_constants, product_variables_ranges)
 monte_carlo.analyze()
-monte_carlo.plot()
+monte_carlo.plot(plot_file_path)
+
+# save the plot
+insert_plot_into_excel(excel_file_path_in, excel_file_path_out, plot_file_path)
