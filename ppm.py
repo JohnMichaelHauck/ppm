@@ -10,7 +10,7 @@ def fv(present_value, rate, periods):
     return present_value * (1 + rate) ** periods
 
 class CompanyConstants:
-    def __init__(self, market_return = 0.03, yearly_development_fte_cost_pv = 50000, development_cost_trend = 0.03, unit_cost_trend = 0.03, sga_percentage = 0.30):
+    def __init__(self, market_return = 0.03, yearly_development_fte_cost_pv = 50000, inflation = 0.03, sga_percentage = 0.30):
         
         # what we would expect to earn on an investment in a financial market with a similar risk
         self.market_return = market_return
@@ -18,11 +18,8 @@ class CompanyConstants:
         # how much it costs per person to run a product development team (in present dollars)
         self.yearly_development_fte_cost_pv = yearly_development_fte_cost_pv
         
-        # how much the cost of development increases each year
-        self.development_cost_trend = development_cost_trend
-
-        # how much the cost of a product increases each year
-        self.unit_cost_trend = unit_cost_trend
+        # how much costs increase each year
+        self.inflation = inflation
 
         # the percentage of the selling price that is allocated to cover selling, general, and administrative expenses        
         self.sga_percentage = sga_percentage
@@ -177,9 +174,9 @@ def calculate_npv(product_variables_snapshot, company_constants):
         unit_sales = product_variables_snapshot.unit_sales_this_month(month)
 
         # compute the future value of the cost of development, unit cost, and unit price for this month
-        monthly_development_cost_fte_fv = fv(company_constants.yearly_development_fte_cost_pv / 12, company_constants.development_cost_trend / 12, month)
-        unit_cost_fv = fv(product_variables_snapshot.unit_cost_pv, company_constants.unit_cost_trend / 12, month)
-        unit_price_fv = fv(product_variables_snapshot.unit_price_pv, company_constants.unit_cost_trend * product_variables_snapshot.unit_price_cost_factor / 12, month)
+        monthly_development_cost_fte_fv = fv(company_constants.yearly_development_fte_cost_pv / 12, company_constants.inflation / 12, month)
+        unit_cost_fv = fv(product_variables_snapshot.unit_cost_pv, company_constants.inflation / 12, month)
+        unit_price_fv = fv(product_variables_snapshot.unit_price_pv, company_constants.inflation / 12, month)
 
         # compute the selling, general, and administrative expenses per unit
         sga_fv = unit_price_fv * company_constants.sga_percentage
@@ -209,7 +206,7 @@ class SimulationTracker:
         self.npvs.append(result.npv() / 1000000)
         self.development_costs.append(result.development_cost / 1000000)
         self.annualized_rois.append(result.annualized_roi(result.total_remaining_years) * 100)
-        self.unit_sales.append(result.unit_sales)
+        self.unit_sales.append(result.unit_sales / 1000)
         self.sales.append(result.sales / 1000000)
         self.years.append(result.total_remaining_years)
 
@@ -265,7 +262,7 @@ class PpmMonteCarlo:
         plt.subplot(rows, cols, subplot_position)
         plt.hist(data, bins=bins, edgecolor='black')
         plt.yticks([])
-        plt.xlabel(xlabel)
+        plt.xlabel(xlabel, fontsize=10)
 
     # create a tornado plot
     def create_tornado_plot(self, names, ranges, min_values, xlabel, subplot_position, rows, cols):
@@ -278,7 +275,7 @@ class PpmMonteCarlo:
         cols = 3
         plt.figure(figsize=(10, 5))
 
-        self.create_histogram(self.simulation_tracker.unit_sales, 30, 'Sales (units)', 1, rows, cols)
+        self.create_histogram(self.simulation_tracker.unit_sales, 30, 'Sales (units/1000)', 1, rows, cols)
         self.create_histogram(self.simulation_tracker.sales, 30, 'Sales ($ millions)', 2, rows, cols)
         self.create_histogram(self.simulation_tracker.development_costs, 30, 'Development ($ millions)', 3, rows, cols)
         self.create_histogram(self.simulation_tracker.npvs, 30, 'NPV ($ millions)', 4, rows, cols)
@@ -303,12 +300,11 @@ def read_excel_data(file_path):
     # Extract values from the DataFrame
     market_return = company_constants_df.iloc[0, 1]
     yearly_development_fte_cost_pv = company_constants_df.iloc[1, 1]
-    development_cost_trend = company_constants_df.iloc[2, 1]
-    unit_cost_trend = company_constants_df.iloc[3, 1]
-    sga_percentage = company_constants_df.iloc[4, 1]
+    inflation = company_constants_df.iloc[2, 1]
+    sga_percentage = company_constants_df.iloc[3, 1]
 
     # Initialize the CompanyConstants instance
-    company_constants = CompanyConstants(market_return, yearly_development_fte_cost_pv, development_cost_trend, unit_cost_trend, sga_percentage)
+    company_constants = CompanyConstants(market_return, yearly_development_fte_cost_pv, inflation, sga_percentage)
 
     # Read the "Product Variables" sheet
     product_variables_df = dfs['Product Variables']
