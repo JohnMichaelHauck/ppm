@@ -1,17 +1,27 @@
 from enum import Enum
+import os
 import numpy as np # linear algebra library
 import matplotlib.pyplot as plt # plotting library
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image
+import tempfile
+import sys
 
+# Present Value (PV) function
 def pv(future_value, rate, periods):
     return future_value / (1 + rate) ** periods
 
+# Future Value (FV) function
 def fv(present_value, rate, periods):
     return present_value * (1 + rate) ** periods
 
+# Company Constants (user input)
 class CompanyConstants:
-    def __init__(self, market_return = 0.03, yearly_development_fte_cost_pv = 50000, inflation = 0.03, sga_percentage = 0.30):
+    def __init__(self,
+                 market_return = 0.03,
+                 yearly_development_fte_cost_pv = 50000,
+                 inflation = 0.03,
+                 sga_percentage = 0.30):
         
         # what we would expect to earn on an investment in a financial market with a similar risk
         self.market_return = market_return
@@ -25,8 +35,24 @@ class CompanyConstants:
         # the percentage of the selling price that is allocated to cover selling, general, and administrative expenses        
         self.sga_percentage = sga_percentage
 
+# Product Variables Ranges (user input)
 class ProductVariablesRanges:
-    def __init__(self, years_before_development=1.5, years_of_development_growth=0, years_of_development_maturity=[3, 4, 5], years_of_development_decline=0, years_before_sales=0, years_of_sales_growth=0, years_of_sales_maturity=[8, 10, 12], years_of_sales_decline=0, development_ftes=[4, 5, 6], maintenance_ftes=[0, 0.5, 1], unit_cost_pv=[8000, 10000, 12000], unit_price_cost_factor=[1.9, 2.0, 2.1], yearly_unit_sales_lowest_price=[110, 120, 130], yearly_unit_sales_highest_price=[70, 80, 90]):
+    def __init__(self,
+                 years_before_development = 1.5,
+                 years_of_development_growth = 0,
+                 years_of_development_maturity = [3, 4, 5],
+                 years_of_development_decline = 0,
+                 years_before_sales = 0,
+                 years_of_sales_growth = 0,
+                 years_of_sales_maturity = [8, 10, 12],
+                 years_of_sales_decline = 0,
+                 development_ftes = [4, 5, 6],
+                 maintenance_ftes = [0, 0.5, 1],
+                 unit_cost_pv=[8000, 10000, 12000],
+                 unit_price_cost_factor = [1.9, 2.0, 2.1],
+                 yearly_unit_sales_lowest_price = [110, 120, 130],
+                 yearly_unit_sales_highest_price = [70, 80, 90]):
+        
         # development years profile
         self.years_before_development = years_before_development
         self.years_of_development_growth = years_of_development_growth
@@ -61,26 +87,37 @@ class ProductVariablesRanges:
     def highest_price(self):
         return self.unit_cost_pv[2] * self.unit_price_cost_factor[2]
 
-def triangle(a, tornado, key):
-    if(a[0] != a[2] and (tornado == Tornado.OFF or key == tornado)):
-        return np.random.triangular(a[0], a[1], a[2])
-    else:
-        return a[1]
-
+# Used to lock in all but one variable when computing a tornado sensitivity analysis
 class Tornado(Enum):
-    OFF = 99
-    Dev_Ftes = 0
-    Dev_Years = 1
-    Maint_Ftes = 2
-    Sales_Years = 3
-    Unit_Cost = 4
-    Margin = 5
-    Yearly_Sales = 6
+    OFF = 0
+    Dev_Ftes = 1
+    Dev_Years = 2
+    Maint_Ftes = 3
+    Sales_Years = 4
+    Unit_Cost = 5
+    Margin = 6
+    Yearly_Sales = 7
 
+# Return a single random number, given a low, likely, and high range, using a triangular distribution
+# Just return the likely number in special situations (e.g., the range is invalid or a tornado sensitivity analysis is being performed with a different variable)
+def triangle(a, tornado = Tornado.OFF, key = Tornado.OFF):
+
+    # if the range is invalid, return the likely (middle) value
+    if(a[0] > a[1] or a[1] > a[2] or a[0] >= a[2]):
+        return a[1]
+    
+    # if the tornado sensitivity analysis is being performed and this variable is not the one bing varied, then return the likely (middle) value
+    if (tornado != Tornado.OFF and key != tornado):
+        return a[1]
+    
+    # return a single random number, given a low, likely, and high range, using a triangular distribution
+    return np.random.triangular(a[0], a[1], a[2])
+
+# Create a snapshot of the product variables with random values
 class ProductVariablesSnapshot:
     def __init__(self, product_variables_ranges, tornado):
         
-        # convert various ranges to actual value using a triangular distribution (or use the expected value if the tornado is on)
+        # convert various ranges to actual values using a triangular distribution (or use the likely value if a tornado sensitivity analysis is being performed)
         self.development_ftes = triangle(product_variables_ranges.development_ftes, tornado, Tornado.Dev_Ftes)
         self.years_before_development = triangle(product_variables_ranges.years_before_development, tornado, Tornado.OFF)
         self.years_of_development_growth = triangle(product_variables_ranges.years_of_development_growth, tornado, Tornado.OFF)
@@ -94,6 +131,8 @@ class ProductVariablesSnapshot:
         self.unit_cost_pv = triangle(product_variables_ranges.unit_cost_pv, tornado, Tornado.Unit_Cost)
         self.unit_price_cost_factor = triangle(product_variables_ranges.unit_price_cost_factor, tornado, Tornado.Margin)
 
+        # some product variables are dependent on others, so we need to compute them
+
         # compute the unit price
         self.unit_price_pv = self.unit_cost_pv * self.unit_price_cost_factor
 
@@ -104,12 +143,13 @@ class ProductVariablesSnapshot:
             sales_range_i = np.array([product_variables_ranges.yearly_unit_sales_lowest_price[i], product_variables_ranges.yearly_unit_sales_highest_price[i]])
             yearly_unit_sales_range[i] = np.interp(self.unit_price_pv, price_range, sales_range_i)
         
-        # convert the sales range to actual value using a triangular distribution
+        # convert the sales range to an actual value using a triangular distribution
         self.yearly_unit_sales = triangle(yearly_unit_sales_range, tornado, Tornado.Yearly_Sales)
 
         # precalculate the total remaining years
         self.total_remaining_years = self.years_before_development + self.years_of_development_growth + self.years_of_development_maturity + self.years_of_development_decline + self.years_before_sales + self.years_of_sales_growth + self.years_of_sales_maturity + self.years_of_sales_decline
 
+    # compute the development full time equivalents for a given month
     def development_ftes_this_month(self, month):
         if month < self.years_before_development * 12:
             return 0
@@ -124,6 +164,7 @@ class ProductVariablesSnapshot:
             return self.development_ftes * (1 - month / (self.years_of_development_decline * 12))
         return self.maintenance_ftes
     
+    # compute the unit sales for a given month
     def unit_sales_this_month(self, month):
         month -= self.years_before_development * 12
         month -= self.years_of_development_growth * 12
@@ -142,6 +183,7 @@ class ProductVariablesSnapshot:
             return self.yearly_unit_sales * (1 - month / (self.years_of_sales_decline * 12)) / 12
         return 0
 
+# The result of a single NPV calculation
 class NpvCalculationResult:
     def __init__(self):
         self.development_cost = 0
@@ -160,13 +202,14 @@ class NpvCalculationResult:
     def annualized_roi(self, years):
         return (1 + self.roi()) ** (1 / years) - 1
 
+# Calculate the NPV of a product
 def calculate_npv(product_variables_snapshot, company_constants):
 
     # this is what we will calculate and return 
     result = NpvCalculationResult()
 
     # loop through all the months
-    for month in range(round(product_variables_snapshot.years_before_development), round(product_variables_snapshot.total_remaining_years * 12)):
+    for month in range(round(product_variables_snapshot.years_before_development * 12), round(product_variables_snapshot.total_remaining_years * 12)):
     
         # compute the development_ftes for this month
         development_ftes = product_variables_snapshot.development_ftes_this_month(month)
@@ -194,21 +237,22 @@ def calculate_npv(product_variables_snapshot, company_constants):
 
     return result
 
+# Track all the results of multiple calculations
 class SimulationTracker:
     def __init__(self):
-        self.npvs = []
-        self.development_costs = []
-        self.annualized_rois = []
-        self.unit_sales = []
-        self.sales = []
+        self.npvs_millions = []
+        self.development_costs_millions = []
+        self.annualized_rois_percentage = []
+        self.unit_sales_thousands = []
+        self.sales_millions = []
         self.years = []
     
     def add(self, result):
-        self.npvs.append(result.npv() / 1000000)
-        self.development_costs.append(result.development_cost / 1000000)
-        self.annualized_rois.append(result.annualized_roi(result.total_remaining_years) * 100)
-        self.unit_sales.append(result.unit_sales / 1000)
-        self.sales.append(result.sales / 1000000)
+        self.npvs_millions.append(result.npv() / 1000000)
+        self.development_costs_millions.append(result.development_cost / 1000000)
+        self.annualized_rois_percentage.append(result.annualized_roi(result.total_remaining_years) * 100)
+        self.unit_sales_thousands.append(result.unit_sales / 1000)
+        self.sales_millions.append(result.sales / 1000000)
         self.years.append(result.total_remaining_years)
 
 class TornadoTracker:
@@ -227,7 +271,7 @@ class TornadoTracker:
     def range(self):
         return self.max_value - self.min_value
 
-class PpmMonteCarlo:
+class MonteCarloAnalyzer:
     def __init__(self, company_constants, product_variables_ranges):
         self.company_constants = company_constants
         self.product_variables_ranges = product_variables_ranges
@@ -271,16 +315,17 @@ class PpmMonteCarlo:
         plt.barh(names, ranges, left=min_values)
         plt.xlabel(xlabel)
 
+    # plot the results
     def plot(self, file_path):
         rows = 2
         cols = 3
         plt.figure(figsize=(10, 5))
 
-        self.create_histogram(self.simulation_tracker.unit_sales, 30, 'Sales (units/1000)', 1, rows, cols)
-        self.create_histogram(self.simulation_tracker.sales, 30, 'Sales ($ millions)', 2, rows, cols)
-        self.create_histogram(self.simulation_tracker.development_costs, 30, 'Development ($ millions)', 3, rows, cols)
-        self.create_histogram(self.simulation_tracker.npvs, 30, 'NPV ($ millions)', 4, rows, cols)
-        self.create_histogram(self.simulation_tracker.annualized_rois, 30, 'Annualized ROI (%)', 5, rows, cols)
+        self.create_histogram(self.simulation_tracker.unit_sales_thousands, 30, 'Sales (units/1000)', 1, rows, cols)
+        self.create_histogram(self.simulation_tracker.sales_millions, 30, 'Sales ($ millions)', 2, rows, cols)
+        self.create_histogram(self.simulation_tracker.development_costs_millions, 30, 'Development ($ millions)', 3, rows, cols)
+        self.create_histogram(self.simulation_tracker.npvs_millions, 30, 'NPV ($ millions)', 4, rows, cols)
+        self.create_histogram(self.simulation_tracker.annualized_rois_percentage, 30, 'Annualized ROI (%)', 5, rows, cols)
         # self.create_histogram(self.years, 30, 'Product Years', 6, rows, cols)
 
         tornado_names = [tornado_tracker.name for tornado_tracker in self.tornado_trackers]
@@ -351,15 +396,17 @@ def insert_plot_into_excel(excel_file_path_in, excel_file_path_out, image_path):
     workbook.save(excel_file_path_out)
 
 # load in the values
-excel_file_path_in = r'C:\Users\John_Hauck\OneDrive - LECO Corporation\ppm.xlsx'
-excel_file_path_out = r'C:\Users\John_Hauck\OneDrive - LECO Corporation\ppm.xlsx'
-plot_file_path = r'C:\Users\John_Hauck\Downloads\ppm.png'
-company_constants, product_variables_ranges = read_excel_data(excel_file_path_in)
+excel_file_path = sys.argv[1]
+
+# get a temporary file name
+plot_file_path = os.path.join(tempfile.gettempdir(), 'ppm.png')
+
+company_constants, product_variables_ranges = read_excel_data(excel_file_path)
 
 # Run the Monte Carlo simulation
-monte_carlo = PpmMonteCarlo(company_constants, product_variables_ranges)
+monte_carlo = MonteCarloAnalyzer(company_constants, product_variables_ranges)
 monte_carlo.analyze()
 monte_carlo.plot(plot_file_path)
 
 # save the plot
-insert_plot_into_excel(excel_file_path_in, excel_file_path_out, plot_file_path)
+insert_plot_into_excel(excel_file_path, excel_file_path, plot_file_path)
