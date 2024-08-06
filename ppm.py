@@ -1,11 +1,11 @@
-from enum import Enum
 import os
+import tempfile
+import sys
+from enum import Enum
 import numpy as np # linear algebra library
 import matplotlib.pyplot as plt # plotting library
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image
-import tempfile
-import sys
 
 # Present Value (PV) function
 def pv(future_value, rate, periods):
@@ -48,10 +48,10 @@ class ProductVariablesRanges:
                  years_of_sales_decline = 0,
                  development_ftes = [4, 5, 6],
                  maintenance_ftes = [0, 0.5, 1],
-                 unit_cost_pv=[8000, 10000, 12000],
+                 unit_cost_pv=[8000, 9000, 12000],
                  unit_price_cost_factor = [1.9, 2.0, 2.1],
-                 yearly_unit_sales_lowest_price = [110, 120, 130],
-                 yearly_unit_sales_highest_price = [70, 80, 90]):
+                 yearly_unit_sales_lowest_price = [110, 120, 150],
+                 yearly_unit_sales_highest_price = [80, 90, 120]):
         
         # development years profile
         self.years_before_development = years_before_development
@@ -87,6 +87,25 @@ class ProductVariablesRanges:
     def highest_price(self):
         return self.unit_cost_pv[2] * self.unit_price_cost_factor[2]
 
+# Return a single random number, given a low, expected, and high range, using a triangular distribution
+# Just return the expected number if requested, or if the range is invalid
+def triangle(a, just_expected = False):
+
+    # if a is a single number, return it
+    if isinstance(a, (int, float)):
+        return a
+
+    # if the range is invalid, return the likely (middle) value
+    if(a[0] > a[1] or a[1] > a[2] or a[0] >= a[2]):
+        return a[1]
+    
+    # if requested, just return the likely (middle) value
+    if (just_expected):
+        return a[1]
+    
+    # return a random number, given a low, likely, and high range, using a triangular distribution
+    return np.random.triangular(a[0], a[1], a[2])
+
 # Used to lock in all but one variable when computing a tornado sensitivity analysis
 class Tornado(Enum):
     OFF = 0
@@ -98,49 +117,30 @@ class Tornado(Enum):
     Margin = 6
     Yearly_Sales = 7
 
-# Return a single random number, given a low, likely, and high range, using a triangular distribution
-# Just return the likely number in special situations (e.g., the range is invalid or a tornado sensitivity analysis is being performed with a different variable)
-def triangle(a, tornado = Tornado.OFF, key = Tornado.OFF):
-
-    # if a is a single number, return it
-    if isinstance(a, (int, float)):
-        return a
-
-    # if the range is invalid, return the likely (middle) value
-    if(a[0] > a[1] or a[1] > a[2] or a[0] >= a[2]):
-        return a[1]
-    
-    # if the tornado sensitivity analysis is being performed and this variable is not the one bing varied, then return the likely (middle) value
-    if (tornado != Tornado.OFF and key != tornado):
-        return a[1]
-    
-    # return a single random number, given a low, likely, and high range, using a triangular distribution
-    return np.random.triangular(a[0], a[1], a[2])
-
 # Create a snapshot of the product variables with random values
 class ProductVariablesSnapshot:
-    def __init__(self, product_variables_ranges, tornado):
+    def __init__(self, product_variables_ranges, tornado = Tornado.OFF):
         
         # convert various ranges to actual values using a triangular distribution (or use the likely value if a tornado sensitivity analysis is being performed)
-        self.development_ftes = triangle(product_variables_ranges.development_ftes, tornado, Tornado.Dev_Ftes)
-        self.years_before_development = triangle(product_variables_ranges.years_before_development, tornado, Tornado.OFF)
-        self.years_of_development_growth = triangle(product_variables_ranges.years_of_development_growth, tornado, Tornado.OFF)
-        self.years_of_development_maturity = triangle(product_variables_ranges.years_of_development_maturity, tornado, Tornado.Dev_Years)
-        self.years_of_development_decline = triangle(product_variables_ranges.years_of_development_decline, tornado, Tornado.OFF)
-        self.maintenance_ftes = triangle(product_variables_ranges.maintenance_ftes, tornado, Tornado.Maint_Ftes)
-        self.years_before_sales = triangle(product_variables_ranges.years_before_sales, tornado, Tornado.OFF)
-        self.years_of_sales_growth = triangle(product_variables_ranges.years_of_sales_growth, tornado, Tornado.OFF)
-        self.years_of_sales_maturity = triangle(product_variables_ranges.years_of_sales_maturity, tornado, Tornado.Sales_Years)
-        self.years_of_sales_decline = triangle(product_variables_ranges.years_of_sales_decline, tornado, Tornado.OFF)
-        self.unit_cost_pv = triangle(product_variables_ranges.unit_cost_pv, tornado, Tornado.Unit_Cost)
-        self.unit_price_cost_factor = triangle(product_variables_ranges.unit_price_cost_factor, tornado, Tornado.Margin)
+        self.development_ftes = triangle(product_variables_ranges.development_ftes, tornado != Tornado.OFF and tornado != Tornado.Dev_Ftes)
+        self.years_before_development = triangle(product_variables_ranges.years_before_development)
+        self.years_of_development_growth = triangle(product_variables_ranges.years_of_development_growth)
+        self.years_of_development_maturity = triangle(product_variables_ranges.years_of_development_maturity, tornado != Tornado.OFF and tornado != Tornado.Dev_Years)
+        self.years_of_development_decline = triangle(product_variables_ranges.years_of_development_decline)
+        self.maintenance_ftes = triangle(product_variables_ranges.maintenance_ftes, tornado != Tornado.OFF and tornado != Tornado.Maint_Ftes)
+        self.years_before_sales = triangle(product_variables_ranges.years_before_sales)
+        self.years_of_sales_growth = triangle(product_variables_ranges.years_of_sales_growth)
+        self.years_of_sales_maturity = triangle(product_variables_ranges.years_of_sales_maturity, tornado != Tornado.OFF and tornado != Tornado.Sales_Years)
+        self.years_of_sales_decline = triangle(product_variables_ranges.years_of_sales_decline)
+        self.unit_cost_pv = triangle(product_variables_ranges.unit_cost_pv, tornado != Tornado.OFF and tornado != Tornado.Unit_Cost)
+        self.unit_price_cost_factor = triangle(product_variables_ranges.unit_price_cost_factor, tornado != Tornado.OFF and tornado != Tornado.Margin)
 
         # some product variables are dependent on others, so we need to compute them
 
         # compute the unit price
         self.unit_price_pv = self.unit_cost_pv * self.unit_price_cost_factor
 
-        # interpoloate the yearly unit sales range as a function of the unit price
+        # interpolate the yearly unit sales range as a function of the unit price
         price_range = np.array([product_variables_ranges.lowest_price(), product_variables_ranges.highest_price()])
         yearly_unit_sales_range = [0, 0, 0]
         for i in range(3):
@@ -148,7 +148,7 @@ class ProductVariablesSnapshot:
             yearly_unit_sales_range[i] = np.interp(self.unit_price_pv, price_range, sales_range_i)
         
         # convert the sales range to an actual value using a triangular distribution
-        self.yearly_unit_sales = triangle(yearly_unit_sales_range, tornado, Tornado.Yearly_Sales)
+        self.yearly_unit_sales = triangle(yearly_unit_sales_range, tornado != Tornado.OFF and tornado != Tornado.Yearly_Sales)
 
         # precalculate the total remaining years
         self.total_remaining_years = self.years_before_development + self.years_of_development_growth + self.years_of_development_maturity + self.years_of_development_decline + self.years_before_sales + self.years_of_sales_growth + self.years_of_sales_maturity + self.years_of_sales_decline
@@ -186,6 +186,23 @@ class ProductVariablesSnapshot:
         if month < self.years_of_sales_decline * 12:
             return self.yearly_unit_sales * (1 - month / (self.years_of_sales_decline * 12)) / 12
         return 0
+    
+    def __str__(self):
+        return (f"development_ftes={self.development_ftes},\n"
+            f"years_before_development={self.years_before_development},\n"
+            f"years_of_development_growth={self.years_of_development_growth},\n"
+            f"years_of_development_maturity={self.years_of_development_maturity},\n"
+            f"years_of_development_decline={self.years_of_development_decline},\n"
+            f"maintenance_ftes={self.maintenance_ftes},\n"
+            f"years_before_sales={self.years_before_sales},\n"
+            f"years_of_sales_growth={self.years_of_sales_growth},\n"
+            f"years_of_sales_maturity={self.years_of_sales_maturity},\n"
+            f"years_of_sales_decline={self.years_of_sales_decline},\n"
+            f"unit_cost_pv={self.unit_cost_pv},\n"
+            f"unit_price_cost_factor={self.unit_price_cost_factor},\n"
+            f"unit_price_pv={self.unit_price_pv},\n"
+            f"yearly_unit_sales={self.yearly_unit_sales},\n"
+            f"total_remaining_years={self.total_remaining_years}")
 
 # The result of a single NPV calculation
 class NpvCalculationResult:
@@ -205,6 +222,16 @@ class NpvCalculationResult:
 
     def annualized_roi(self, years):
         return (1 + self.roi()) ** (1 / years) - 1
+    
+    def __str__(self):
+        return (f"development_cost={self.development_cost},\n"
+            f"sales={self.sales},\n"
+            f"cost_of_goods={self.cost_of_goods},\n"
+            f"sga={self.sga},\n"
+            f"unit_sales={self.unit_sales},\n"
+            f"total_remaining_years={self.total_remaining_years},\n"
+            f"npv={self.npv()},\n"
+            f"roi={self.roi()}")
 
 # Calculate the NPV of a product
 def calculate_npv(product_variables_snapshot, company_constants):
@@ -292,7 +319,7 @@ class MonteCarloAnalyzer:
     def analyze(self):
         # compute the monte carlo analysis
         for i in range(2000):
-            product_variables_snapshot = ProductVariablesSnapshot(self.product_variables_ranges, Tornado.OFF)
+            product_variables_snapshot = ProductVariablesSnapshot(self.product_variables_ranges)
             result = calculate_npv(product_variables_snapshot, self.company_constants)
             self.simulation_tracker.add(result)
 
@@ -320,7 +347,7 @@ class MonteCarloAnalyzer:
         plt.xlabel(xlabel)
 
     # plot the results
-    def plot(self, file_path):
+    def plot(self, file_path = ""):
         rows = 2
         cols = 3
         plt.figure(figsize=(10, 5))
