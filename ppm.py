@@ -102,6 +102,10 @@ class Tornado(Enum):
 # Just return the likely number in special situations (e.g., the range is invalid or a tornado sensitivity analysis is being performed with a different variable)
 def triangle(a, tornado = Tornado.OFF, key = Tornado.OFF):
 
+    # if a is a single number, return it
+    if isinstance(a, (int, float)):
+        return a
+
     # if the range is invalid, return the likely (middle) value
     if(a[0] > a[1] or a[1] > a[2] or a[0] >= a[2]):
         return a[1]
@@ -334,7 +338,10 @@ class MonteCarloAnalyzer:
         self.create_tornado_plot(tornado_names, tornado_ranges, tornado_min_values, 'NPV Sensitivity ($ millions)', 6, rows, cols)
 
         plt.tight_layout()
-        plt.savefig(file_path)
+        if( file_path != ""):
+            plt.savefig(file_path)
+        else:
+            plt.show()
         plt.close()
 
 def read_excel_data(file_path):
@@ -395,18 +402,22 @@ def insert_plot_into_excel(excel_file_path_in, excel_file_path_out, image_path):
     # Save the workbook to the new file
     workbook.save(excel_file_path_out)
 
-# load in the values
-excel_file_path = sys.argv[1]
-
-# get a temporary file name
-plot_file_path = os.path.join(tempfile.gettempdir(), 'ppm.png')
-
-company_constants, product_variables_ranges = read_excel_data(excel_file_path)
+# Check if there are any command line arguments
+if len(sys.argv) == 2:
+    excel_file_path = sys.argv[1]
+    plot_file_path = os.path.join(tempfile.gettempdir(), 'ppm.png')
+    company_constants, product_variables_ranges = read_excel_data(excel_file_path)
+else:
+    excel_file_path = ""
+    plot_file_path = ""
+    company_constants = CompanyConstants()
+    product_variables_ranges = ProductVariablesRanges()
 
 # Run the Monte Carlo simulation
 monte_carlo = MonteCarloAnalyzer(company_constants, product_variables_ranges)
 monte_carlo.analyze()
 monte_carlo.plot(plot_file_path)
 
-# save the plot
-insert_plot_into_excel(excel_file_path, excel_file_path, plot_file_path)
+# Save the plot
+if len(sys.argv) == 2:
+    insert_plot_into_excel(excel_file_path, excel_file_path, plot_file_path)
