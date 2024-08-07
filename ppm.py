@@ -213,6 +213,9 @@ class NpvCalculationResult:
         self.sga = 0
         self.unit_sales = 0
         self.total_remaining_years = 0
+        self.investment_before_revenue = 0
+        self.years_until_revenue = 0
+        self.years_until_break_even = 0
 
     def npv(self):
         return self.sales - self.cost_of_goods - self.sga - self.development_cost
@@ -230,6 +233,9 @@ class NpvCalculationResult:
             f"sga={self.sga},\n"
             f"unit_sales={self.unit_sales},\n"
             f"total_remaining_years={self.total_remaining_years},\n"
+            f"investment_before_revenue={self.investment_before_revenue},\n"
+            f"years_until_revenue={self.years_until_revenue},\n"
+            f"years_until_break_even={self.years_until_break_even},\n"
             f"npv={self.npv()},\n"
             f"roi={self.roi()}")
 
@@ -263,6 +269,15 @@ def calculate_npv(product_variables_snapshot, company_constants):
         result.cost_of_goods += pv(unit_sales * unit_cost_fv, company_constants.market_return / 12, month)
         result.sga += pv(unit_sales * sga_fv, company_constants.market_return / 12, month)
 
+        # if we haven't started earning revenue yet, and we just did, record the year
+        if( result.years_until_revenue == 0 and unit_sales > 0):
+            result.years_until_revenue = month / 12
+            result.investment_before_revenue = result.development_cost
+
+        # if we haven't broken even yet, and we just did, record the year
+        if( result.years_until_break_even == 0 and result.npv() >= 0):
+            result.years_until_break_even = month / 12
+
     # handy for the result
     result.total_remaining_years = product_variables_snapshot.total_remaining_years
 
@@ -277,6 +292,9 @@ class SimulationTracker:
         self.unit_sales_thousands = []
         self.sales_millions = []
         self.years = []
+        self.investment_before_revenue = []
+        self.years_until_revenue = []
+        self.years_until_break_even = []
     
     def add(self, result):
         self.npvs_millions.append(result.npv() / 1000000)
@@ -285,6 +303,9 @@ class SimulationTracker:
         self.unit_sales_thousands.append(result.unit_sales / 1000)
         self.sales_millions.append(result.sales / 1000000)
         self.years.append(result.total_remaining_years)
+        self.investment_before_revenue.append(result.investment_before_revenue / 1000000)
+        self.years_until_revenue.append(result.years_until_revenue)
+        self.years_until_break_even.append(result.years_until_break_even)
 
 class TornadoTracker:
     def __init__(self, tornado, name):
@@ -348,21 +369,24 @@ class MonteCarloAnalyzer:
 
     # plot the results
     def plot(self, file_path = ""):
-        rows = 2
+        rows = 3
         cols = 3
         plt.figure(figsize=(10, 5))
 
-        self.create_histogram(self.simulation_tracker.unit_sales_thousands, 30, 'Sales (units/1000)', 1, rows, cols)
-        self.create_histogram(self.simulation_tracker.sales_millions, 30, 'Sales ($ millions)', 2, rows, cols)
-        self.create_histogram(self.simulation_tracker.development_costs_millions, 30, 'Development ($ millions)', 3, rows, cols)
-        self.create_histogram(self.simulation_tracker.npvs_millions, 30, 'NPV ($ millions)', 4, rows, cols)
-        self.create_histogram(self.simulation_tracker.annualized_rois_percentage, 30, 'Annualized ROI (%)', 5, rows, cols)
+        self.create_histogram(self.simulation_tracker.unit_sales_thousands, 20, 'Sales (units/1000)', 1, rows, cols)
+        self.create_histogram(self.simulation_tracker.sales_millions, 20, 'Sales ($ millions)', 2, rows, cols)
+        self.create_histogram(self.simulation_tracker.development_costs_millions, 20, 'Development ($ millions)', 3, rows, cols)
+        self.create_histogram(self.simulation_tracker.npvs_millions, 20, 'NPV ($ millions)', 4, rows, cols)
+        self.create_histogram(self.simulation_tracker.annualized_rois_percentage, 20, 'Annualized ROI (%)', 5, rows, cols)
         # self.create_histogram(self.years, 30, 'Product Years', 6, rows, cols)
+        self.create_histogram(self.simulation_tracker.investment_before_revenue, 20, 'Investment before Revenue ($ millions)', 6, rows, cols)
+        self.create_histogram(self.simulation_tracker.years_until_revenue, 10, 'Years until Revenue', 7, rows, cols)
+        self.create_histogram(self.simulation_tracker.years_until_break_even, 10, 'Years until Break Even', 8, rows, cols)
 
         tornado_names = [tornado_tracker.name for tornado_tracker in self.tornado_trackers]
         tornado_ranges = [tornado_tracker.range() for tornado_tracker in self.tornado_trackers]
         tornado_min_values = [tornado_tracker.min_value for tornado_tracker in self.tornado_trackers]
-        self.create_tornado_plot(tornado_names, tornado_ranges, tornado_min_values, 'NPV Sensitivity ($ millions)', 6, rows, cols)
+        self.create_tornado_plot(tornado_names, tornado_ranges, tornado_min_values, 'NPV Sensitivity ($ millions)', 9, rows, cols)
 
         plt.tight_layout()
         if( file_path != ""):
