@@ -246,7 +246,7 @@ def calculate_npv(product_variables_snapshot, company_constants):
     result = NpvCalculationResult()
 
     # loop through all the months
-    for month in range(round(product_variables_snapshot.years_before_development * 12), round(product_variables_snapshot.total_remaining_years * 12)):
+    for month in range(round(product_variables_snapshot.years_before_development * 12), round(product_variables_snapshot.total_remaining_years * 12) + 1):
     
         # compute the development_ftes for this month
         development_ftes = product_variables_snapshot.development_ftes_this_month(month)
