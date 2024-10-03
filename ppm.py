@@ -35,6 +35,12 @@ class CompanyConstants:
         # the percentage of the selling price that is allocated to cover selling, general, and administrative expenses        
         self.sga_percentage = sga_percentage
 
+# Return the value of a range, or a single value if it is not a range
+def safe_index(range, i):
+    if isinstance(range, (int, float)):
+        return range
+    return range[i]
+
 # Product Variables Ranges (user input)
 class ProductVariablesRanges:
     def __init__(self,
@@ -48,7 +54,7 @@ class ProductVariablesRanges:
                  years_of_sales_decline = 0,
                  development_ftes = [4, 5, 6],
                  maintenance_ftes = [0, 0.5, 1],
-                 unit_cost_pv=[8000, 9000, 12000],
+                 unit_cost_pv = [8000, 9000, 12000],
                  unit_price_cost_factor = [1.9, 2.0, 2.1],
                  yearly_unit_sales_lowest_price = [110, 120, 150],
                  yearly_unit_sales_highest_price = [80, 90, 120]):
@@ -82,10 +88,10 @@ class ProductVariablesRanges:
         self.yearly_unit_sales_highest_price = yearly_unit_sales_highest_price
 
     def lowest_price(self):
-        return self.unit_cost_pv[0] * self.unit_price_cost_factor[0]
+        return safe_index(self.unit_cost_pv, 0) * safe_index(self.unit_price_cost_factor, 0)
     
     def highest_price(self):
-        return self.unit_cost_pv[2] * self.unit_price_cost_factor[2]
+        return safe_index(self.unit_cost_pv, 2) * safe_index(self.unit_price_cost_factor, 2)
 
 # Return a single random number, given a low, expected, and high range, using a triangular distribution
 # Just return the expected number if requested, or if the range is invalid
@@ -144,7 +150,7 @@ class ProductVariablesSnapshot:
         price_range = np.array([product_variables_ranges.lowest_price(), product_variables_ranges.highest_price()])
         yearly_unit_sales_range = [0, 0, 0]
         for i in range(3):
-            sales_range_i = np.array([product_variables_ranges.yearly_unit_sales_lowest_price[i], product_variables_ranges.yearly_unit_sales_highest_price[i]])
+            sales_range_i = np.array([safe_index(product_variables_ranges.yearly_unit_sales_lowest_price, i), safe_index(product_variables_ranges.yearly_unit_sales_highest_price, i)])
             yearly_unit_sales_range[i] = np.interp(self.unit_price_pv, price_range, sales_range_i)
         
         # convert the sales range to an actual value using a triangular distribution
@@ -221,9 +227,13 @@ class NpvCalculationResult:
         return self.sales - self.cost_of_goods - self.sga - self.development_cost
 
     def roi(self):
+        if( self.development_cost == 0):
+            return 0
         return self.npv() / self.development_cost
 
     def annualized_roi(self, years):
+        if( years == 0):
+            return 0
         return (1 + self.roi()) ** (1 / years) - 1
     
     def __str__(self):
