@@ -18,10 +18,10 @@ def fv(present_value, rate, periods):
 # Company Constants (user input)
 class CompanyConstants:
     def __init__(self,
-                 market_return = 0.03,
-                 yearly_development_fte_cost_pv = 50000,
-                 inflation = 0.03,
-                 sga_percentage = 0.30):
+                 market_return = 0.0,
+                 yearly_development_fte_cost_pv = 170000,
+                 inflation = 0.0,
+                 sga_factor = 0.31):
         
         # what we would expect to earn on an investment in a financial market with a similar risk
         self.market_return = market_return
@@ -33,7 +33,7 @@ class CompanyConstants:
         self.inflation = inflation
 
         # the percentage of the selling price that is allocated to cover selling, general, and administrative expenses        
-        self.sga_percentage = sga_percentage
+        self.sga_factor = sga_factor
 
 # Return the value of a range, or a single value if it is not a range
 def safe_index(range, i):
@@ -41,23 +41,27 @@ def safe_index(range, i):
         return range
     return range[i]
 
+# Relationship between margin and cost factor
+def cost_factor(margin):
+    return 1 / (1 - margin)
+
 # Product Variables Ranges (user input)
 class ProductVariablesRanges:
     def __init__(self,
-                 years_before_development = 1.5,
+                 years_before_development = 0,
                  years_of_development_growth = 0,
-                 years_of_development_maturity = [3, 4, 5],
+                 years_of_development_maturity = 2,
                  years_of_development_decline = 0,
                  years_before_sales = 0,
                  years_of_sales_growth = 0,
-                 years_of_sales_maturity = [8, 10, 12],
+                 years_of_sales_maturity = 12,
                  years_of_sales_decline = 0,
-                 development_ftes = [4, 5, 6],
-                 maintenance_ftes = [0, 0.5, 1],
-                 unit_cost_pv = [8000, 9000, 12000],
-                 unit_price_cost_factor = [1.9, 2.0, 2.1],
-                 yearly_unit_sales_lowest_price = [110, 120, 150],
-                 yearly_unit_sales_highest_price = [80, 90, 120]):
+                 development_ftes = 5,
+                 maintenance_ftes = 0,
+                 unit_cost_pv = 21300,
+                 unit_margin = 0.677272727,
+                 yearly_unit_sales_lowest_price = 11,
+                 yearly_unit_sales_highest_price = 11):
         
         # development years profile
         self.years_before_development = years_before_development
@@ -80,18 +84,18 @@ class ProductVariablesRanges:
         # the cost to manufacture one unit of the product (in present dollars)
         self.unit_cost_pv = unit_cost_pv
         
-        # the selling price cost factors to compute the price of the product (in present dollars)
-        self.unit_price_cost_factor = unit_price_cost_factor
+        # the selling price margin
+        self.unit_margin = unit_margin
 
         # the number of units that are expected to be sold per year
         self.yearly_unit_sales_lowest_price = yearly_unit_sales_lowest_price
         self.yearly_unit_sales_highest_price = yearly_unit_sales_highest_price
 
     def lowest_price(self):
-        return safe_index(self.unit_cost_pv, 0) * safe_index(self.unit_price_cost_factor, 0)
+        return safe_index(self.unit_cost_pv, 0) * cost_factor(safe_index(self.unit_margin, 0))
     
     def highest_price(self):
-        return safe_index(self.unit_cost_pv, 2) * safe_index(self.unit_price_cost_factor, 2)
+        return safe_index(self.unit_cost_pv, 2) * cost_factor(safe_index(self.unit_margin, 2))
 
 # Return a single random number, given a low, expected, and high range, using a triangular distribution
 # Just return the expected number if requested, or if the range is invalid
@@ -139,12 +143,12 @@ class ProductVariablesSnapshot:
         self.years_of_sales_maturity = triangle(product_variables_ranges.years_of_sales_maturity, tornado != Tornado.OFF and tornado != Tornado.Sales_Years)
         self.years_of_sales_decline = triangle(product_variables_ranges.years_of_sales_decline)
         self.unit_cost_pv = triangle(product_variables_ranges.unit_cost_pv, tornado != Tornado.OFF and tornado != Tornado.Unit_Cost)
-        self.unit_price_cost_factor = triangle(product_variables_ranges.unit_price_cost_factor, tornado != Tornado.OFF and tornado != Tornado.Margin)
+        self.unit_margin = triangle(product_variables_ranges.unit_margin, tornado != Tornado.OFF and tornado != Tornado.Margin)
 
         # some product variables are dependent on others, so we need to compute them
 
         # compute the unit price
-        self.unit_price_pv = self.unit_cost_pv * self.unit_price_cost_factor
+        self.unit_price_pv = self.unit_cost_pv * cost_factor(self.unit_margin)
 
         # interpolate the yearly unit sales range as a function of the unit price
         price_range = np.array([product_variables_ranges.lowest_price(), product_variables_ranges.highest_price()])
@@ -205,7 +209,7 @@ class ProductVariablesSnapshot:
             f"years_of_sales_maturity={self.years_of_sales_maturity},\n"
             f"years_of_sales_decline={self.years_of_sales_decline},\n"
             f"unit_cost_pv={self.unit_cost_pv},\n"
-            f"unit_price_cost_factor={self.unit_price_cost_factor},\n"
+            f"unit_margin={self.unit_margin},\n"
             f"unit_price_pv={self.unit_price_pv},\n"
             f"yearly_unit_sales={self.yearly_unit_sales},\n"
             f"total_remaining_years={self.total_remaining_years}")
@@ -270,7 +274,7 @@ def calculate_npv(product_variables_snapshot, company_constants):
         unit_price_fv = fv(product_variables_snapshot.unit_price_pv, company_constants.inflation / 12, month)
 
         # compute the selling, general, and administrative expenses per unit
-        sga_fv = unit_price_fv * company_constants.sga_percentage
+        sga_fv = unit_price_fv * company_constants.sga_factor
 
         # add the cost of development in present value terms
         result.development_cost += pv(development_ftes * monthly_development_cost_fte_fv, company_constants.market_return / 12, month)
@@ -299,7 +303,7 @@ class SimulationTracker:
         self.npvs_millions = []
         self.development_costs_millions = []
         self.annualized_rois_percentage = []
-        self.unit_sales_thousands = []
+        self.unit_sales = []
         self.sales_millions = []
         self.years = []
         self.investment_before_revenue = []
@@ -310,7 +314,7 @@ class SimulationTracker:
         self.npvs_millions.append(result.npv() / 1000000)
         self.development_costs_millions.append(result.development_cost / 1000000)
         self.annualized_rois_percentage.append(result.annualized_roi(result.total_remaining_years) * 100)
-        self.unit_sales_thousands.append(result.unit_sales / 1000)
+        self.unit_sales.append(result.unit_sales)
         self.sales_millions.append(result.sales / 1000000)
         self.years.append(result.total_remaining_years)
         self.investment_before_revenue.append(result.investment_before_revenue / 1000000)
@@ -383,7 +387,7 @@ class MonteCarloAnalyzer:
         cols = 3
         plt.figure(figsize=(10, 5))
 
-        self.create_histogram(self.simulation_tracker.unit_sales_thousands, 20, 'Sales (units/1000)', 1, rows, cols)
+        self.create_histogram(self.simulation_tracker.unit_sales, 20, 'Sales (units)', 1, rows, cols)
         self.create_histogram(self.simulation_tracker.sales_millions, 20, 'Sales ($ millions)', 2, rows, cols)
         self.create_histogram(self.simulation_tracker.development_costs_millions, 20, 'Development ($ millions)', 3, rows, cols)
         self.create_histogram(self.simulation_tracker.npvs_millions, 20, 'NPV ($ millions)', 4, rows, cols)
@@ -416,10 +420,10 @@ def read_excel_data(file_path):
     market_return = company_constants_sheet.cell(row=2, column=2).value
     yearly_development_fte_cost_pv = company_constants_sheet.cell(row=3, column=2).value
     inflation = company_constants_sheet.cell(row=4, column=2).value
-    sga_percentage = company_constants_sheet.cell(row=5, column=2).value
+    sga_factor = company_constants_sheet.cell(row=5, column=2).value
 
     # Initialize the CompanyConstants instance
-    company_constants = CompanyConstants(market_return, yearly_development_fte_cost_pv, inflation, sga_percentage)
+    company_constants = CompanyConstants(market_return, yearly_development_fte_cost_pv, inflation, sga_factor)
 
     def convert(sheet, row):
         return [
@@ -440,12 +444,12 @@ def read_excel_data(file_path):
     development_ftes = convert(product_variables_sheet, 10)
     maintenance_ftes = convert(product_variables_sheet, 11)
     unit_cost_pv = convert(product_variables_sheet, 12)
-    unit_price_cost_factor = convert(product_variables_sheet, 13)
+    unit_margin = convert(product_variables_sheet, 13)
     yearly_unit_sales_at_15200 = convert(product_variables_sheet, 14)
     yearly_unit_sales_at_25200 = convert(product_variables_sheet, 15)
 
     # Initialize the ProductVariablesRanges instance
-    product_variables_ranges = ProductVariablesRanges(years_before_development, years_of_development_growth, years_of_development_maturity, years_of_development_decline, years_before_sales, years_of_sales_growth, years_of_sales_maturity, years_of_sales_decline, development_ftes, maintenance_ftes, unit_cost_pv, unit_price_cost_factor, yearly_unit_sales_at_15200, yearly_unit_sales_at_25200)
+    product_variables_ranges = ProductVariablesRanges(years_before_development, years_of_development_growth, years_of_development_maturity, years_of_development_decline, years_before_sales, years_of_sales_growth, years_of_sales_maturity, years_of_sales_decline, development_ftes, maintenance_ftes, unit_cost_pv, unit_margin, yearly_unit_sales_at_15200, yearly_unit_sales_at_25200)
 
     return company_constants, product_variables_ranges
 
