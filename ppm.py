@@ -18,9 +18,9 @@ def fv(present_value, rate, periods):
 # Company Constants (user input)
 class CompanyConstants:
     def __init__(self,
-                 market_return = 0.0,
+                 market_return = 0.00,
                  yearly_development_fte_cost_pv = 170000,
-                 inflation = 0.0,
+                 inflation = 0.00,
                  sga_factor = 0.31):
         
         # what we would expect to earn on an investment in a financial market with a similar risk
@@ -196,23 +196,14 @@ class ProductVariablesSnapshot:
         if month < self.years_of_sales_decline * 12:
             return self.yearly_unit_sales * (1 - month / (self.years_of_sales_decline * 12)) / 12
         return 0
-    
-    def __str__(self):
-        return (f"development_ftes={self.development_ftes},\n"
-            f"years_before_development={self.years_before_development},\n"
-            f"years_of_development_growth={self.years_of_development_growth},\n"
-            f"years_of_development_maturity={self.years_of_development_maturity},\n"
-            f"years_of_development_decline={self.years_of_development_decline},\n"
-            f"maintenance_ftes={self.maintenance_ftes},\n"
-            f"years_before_sales={self.years_before_sales},\n"
-            f"years_of_sales_growth={self.years_of_sales_growth},\n"
-            f"years_of_sales_maturity={self.years_of_sales_maturity},\n"
-            f"years_of_sales_decline={self.years_of_sales_decline},\n"
-            f"unit_cost_pv={self.unit_cost_pv},\n"
-            f"unit_margin={self.unit_margin},\n"
-            f"unit_price_pv={self.unit_price_pv},\n"
-            f"yearly_unit_sales={self.yearly_unit_sales},\n"
-            f"total_remaining_years={self.total_remaining_years}")
+
+# Create a snapshot of the mix of product variables with random values
+class MixVariablesSnapshot:
+    def __init__(self, mix_variables_ranges, tornado = Tornado.OFF):
+        self.mix_variables_ranges = mix_variables_ranges
+        self.mix_variables_snapshots = []
+        for product_variables_ranges in mix_variables_ranges:
+            self.mix_variables_snapshots.append(ProductVariablesSnapshot(product_variables_ranges, tornado))
 
 # The result of a single NPV calculation
 class NpvCalculationResult:
@@ -222,10 +213,6 @@ class NpvCalculationResult:
         self.cost_of_goods = 0
         self.sga = 0
         self.unit_sales = 0
-        self.total_remaining_years = 0
-        self.investment_before_revenue = 0
-        self.years_until_revenue = 0
-        self.years_until_break_even = 0
 
     def npv(self):
         return self.sales - self.cost_of_goods - self.sga - self.development_cost
@@ -240,24 +227,18 @@ class NpvCalculationResult:
             return 0
         return (1 + self.roi()) ** (1 / years) - 1
     
-    def __str__(self):
-        return (f"development_cost={self.development_cost},\n"
-            f"sales={self.sales},\n"
-            f"cost_of_goods={self.cost_of_goods},\n"
-            f"sga={self.sga},\n"
-            f"unit_sales={self.unit_sales},\n"
-            f"total_remaining_years={self.total_remaining_years},\n"
-            f"investment_before_revenue={self.investment_before_revenue},\n"
-            f"years_until_revenue={self.years_until_revenue},\n"
-            f"years_until_break_even={self.years_until_break_even},\n"
-            f"npv={self.npv()},\n"
-            f"roi={self.roi()}")
+    def add(self, result):
+        self.development_cost += result.development_cost
+        self.sales += result.sales
+        self.cost_of_goods += result.cost_of_goods
+        self.sga += result.sga
+        self.unit_sales += result.unit_sales
 
 # Calculate the NPV of a product
-def calculate_npv(product_variables_snapshot, company_constants):
+def calculate_product_npv(product_variables_snapshot, company_constants):
 
     # this is what we will calculate and return 
-    result = NpvCalculationResult()
+    product_result = NpvCalculationResult()
 
     # loop through all the months
     for month in range(round(product_variables_snapshot.years_before_development * 12), round(product_variables_snapshot.total_remaining_years * 12) + 1):
@@ -276,50 +257,36 @@ def calculate_npv(product_variables_snapshot, company_constants):
         # compute the selling, general, and administrative expenses per unit
         sga_fv = unit_price_fv * company_constants.sga_factor
 
-        # add the cost of development in present value terms
-        result.development_cost += pv(development_ftes * monthly_development_cost_fte_fv, company_constants.market_return / 12, month)
-        result.unit_sales += unit_sales
-        result.sales += pv(unit_sales * unit_price_fv, company_constants.market_return / 12, month)
-        result.cost_of_goods += pv(unit_sales * unit_cost_fv, company_constants.market_return / 12, month)
-        result.sga += pv(unit_sales * sga_fv, company_constants.market_return / 12, month)
+        # add the results for this month to the total
+        product_result.development_cost += pv(development_ftes * monthly_development_cost_fte_fv, company_constants.market_return / 12, month)
+        product_result.sales += pv(unit_sales * unit_price_fv, company_constants.market_return / 12, month)
+        product_result.cost_of_goods += pv(unit_sales * unit_cost_fv, company_constants.market_return / 12, month)
+        product_result.sga += pv(unit_sales * sga_fv, company_constants.market_return / 12, month)
+        product_result.unit_sales += unit_sales
 
-        # if we haven't started earning revenue yet, and we just did, record the year
-        if( result.years_until_revenue == 0 and unit_sales > 0):
-            result.years_until_revenue = month / 12
-            result.investment_before_revenue = result.development_cost
+    return product_result
 
-        # if we haven't broken even yet, and we just did, record the year
-        if( result.years_until_break_even == 0 and result.npv() >= 0):
-            result.years_until_break_even = month / 12
-
-    # handy for the result
-    result.total_remaining_years = product_variables_snapshot.total_remaining_years
-
-    return result
+# Calculate the NPV of a product mix
+def calculate_mix_npv(mix_variables_snapshot, company_constants):
+    mix_result = NpvCalculationResult()
+    for product_variables_snapshot in mix_variables_snapshot.mix_variables_snapshots:
+        product_result = calculate_product_npv(product_variables_snapshot, company_constants)
+        mix_result.add(product_result)
+    return mix_result
 
 # Track all the results of multiple calculations
 class SimulationTracker:
     def __init__(self):
         self.npvs_millions = []
         self.development_costs_millions = []
-        self.annualized_rois_percentage = []
         self.unit_sales = []
         self.sales_millions = []
-        self.years = []
-        self.investment_before_revenue = []
-        self.years_until_revenue = []
-        self.years_until_break_even = []
     
     def add(self, result):
         self.npvs_millions.append(result.npv() / 1000000)
         self.development_costs_millions.append(result.development_cost / 1000000)
-        self.annualized_rois_percentage.append(result.annualized_roi(result.total_remaining_years) * 100)
         self.unit_sales.append(result.unit_sales)
         self.sales_millions.append(result.sales / 1000000)
-        self.years.append(result.total_remaining_years)
-        self.investment_before_revenue.append(result.investment_before_revenue / 1000000)
-        self.years_until_revenue.append(result.years_until_revenue)
-        self.years_until_break_even.append(result.years_until_break_even)
 
 class TornadoTracker:
     def __init__(self, tornado, name):
@@ -338,9 +305,9 @@ class TornadoTracker:
         return self.max_value - self.min_value
 
 class MonteCarloAnalyzer:
-    def __init__(self, company_constants, product_variables_ranges):
+    def __init__(self, company_constants, mix_variables_ranges):
         self.company_constants = company_constants
-        self.product_variables_ranges = product_variables_ranges
+        self.mix_variables_ranges = mix_variables_ranges
         self.simulation_tracker = SimulationTracker()
         self.tornado_trackers = []
         self.tornado_trackers.append(TornadoTracker(Tornado.Dev_Ftes, 'Dev FTEs'))
@@ -354,15 +321,15 @@ class MonteCarloAnalyzer:
     def analyze(self):
         # compute the monte carlo analysis
         for i in range(2000):
-            product_variables_snapshot = ProductVariablesSnapshot(self.product_variables_ranges)
-            result = calculate_npv(product_variables_snapshot, self.company_constants)
+            mix_variables_snapshot = MixVariablesSnapshot(self.mix_variables_ranges)
+            result = calculate_mix_npv(mix_variables_snapshot, self.company_constants)
             self.simulation_tracker.add(result)
 
         # compute the tornado analysis
         for i in range(100):    
             for tornado_tracker in self.tornado_trackers:
-                product_variables_snapshot = ProductVariablesSnapshot(self.product_variables_ranges, tornado_tracker.tornado)
-                result = calculate_npv(product_variables_snapshot, self.company_constants)
+                mix_variables_snapshot = MixVariablesSnapshot(self.mix_variables_ranges, tornado_tracker.tornado)
+                result = calculate_mix_npv(mix_variables_snapshot, self.company_constants)
                 tornado_tracker.add(result.npv() / 1000000)
 
         # Sort the tornado trackers by range
@@ -391,11 +358,6 @@ class MonteCarloAnalyzer:
         self.create_histogram(self.simulation_tracker.sales_millions, 20, 'Sales ($ millions)', 2, rows, cols)
         self.create_histogram(self.simulation_tracker.development_costs_millions, 20, 'Development ($ millions)', 3, rows, cols)
         self.create_histogram(self.simulation_tracker.npvs_millions, 20, 'NPV ($ millions)', 4, rows, cols)
-        self.create_histogram(self.simulation_tracker.annualized_rois_percentage, 20, 'Annualized ROI (%)', 5, rows, cols)
-        # self.create_histogram(self.years, 30, 'Product Years', 6, rows, cols)
-        self.create_histogram(self.simulation_tracker.investment_before_revenue, 20, 'Investment before Revenue ($ millions)', 6, rows, cols)
-        self.create_histogram(self.simulation_tracker.years_until_revenue, 10, 'Years until Revenue', 7, rows, cols)
-        self.create_histogram(self.simulation_tracker.years_until_break_even, 10, 'Years until Break Even', 8, rows, cols)
 
         tornado_names = [tornado_tracker.name for tornado_tracker in self.tornado_trackers]
         tornado_ranges = [tornado_tracker.range() for tornado_tracker in self.tornado_trackers]
@@ -476,10 +438,59 @@ else:
     excel_file_path = ""
     plot_file_path = ""
     company_constants = CompanyConstants()
-    product_variables_ranges = ProductVariablesRanges()
+
+    product1 = ProductVariablesRanges(
+        years_before_development = 0,
+        years_of_development_growth = 0,
+        years_of_development_maturity = 2,
+        years_of_development_decline = 0,
+        years_before_sales = 0,
+        years_of_sales_growth = 0,
+        years_of_sales_maturity = 12,
+        years_of_sales_decline = 0,
+        development_ftes = 5,
+        maintenance_ftes = 0,
+        unit_cost_pv = 21300,
+        unit_margin = 0.677,
+        yearly_unit_sales_lowest_price = 2,
+        yearly_unit_sales_highest_price = 2)
+
+    product2 = ProductVariablesRanges(
+        years_before_development = 0,
+        years_of_development_growth = 0,
+        years_of_development_maturity = 2,
+        years_of_development_decline = 0,
+        years_before_sales = 0,
+        years_of_sales_growth = 0,
+        years_of_sales_maturity = 12,
+        years_of_sales_decline = 0,
+        development_ftes = 0,
+        maintenance_ftes = 0,
+        unit_cost_pv = 21300,
+        unit_margin = 0.677,
+        yearly_unit_sales_lowest_price = 9,
+        yearly_unit_sales_highest_price = 9)
+
+    product3 = ProductVariablesRanges(
+        years_before_development = 0,
+        years_of_development_growth = 0,
+        years_of_development_maturity = 2,
+        years_of_development_decline = 0,
+        years_before_sales = 0,
+        years_of_sales_growth = 0,
+        years_of_sales_maturity = 12,
+        years_of_sales_decline = 0,
+        development_ftes = 0,
+        maintenance_ftes = 0,
+        unit_cost_pv = 21300,
+        unit_margin = 0.57,
+        yearly_unit_sales_lowest_price = 5,
+        yearly_unit_sales_highest_price = 5)
+
+    mix_variables_ranges = [product1, product2, product3]
 
 # Run the Monte Carlo simulation
-monte_carlo = MonteCarloAnalyzer(company_constants, product_variables_ranges)
+monte_carlo = MonteCarloAnalyzer(company_constants, mix_variables_ranges)
 monte_carlo.analyze()
 monte_carlo.plot(plot_file_path)
 
