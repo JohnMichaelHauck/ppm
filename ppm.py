@@ -15,6 +15,15 @@ def pv(future_value, rate, periods):
 def fv(present_value, rate, periods):
     return present_value * (1 + rate) ** periods
 
+# Add a value to a given index in the array, growing the array if needed
+def add_value_to_index(array, index, value):
+    # Extend the array if the index is out of bounds
+    if index >= len(array):
+        array.extend([0] * (index - len(array) + 1))
+    
+    # Add the value to the specified index
+    array[index] += value
+
 # Company Constants (user input)
 class CompanyConstants:
     def __init__(self,
@@ -62,7 +71,6 @@ class ProductVariablesRanges:
                  unit_cost_pv = 21300,
                  unit_margin = 0.677272727,
                  sga_factor = 0.31,
-                 sga_annual_fixed = 0,
                  yearly_unit_sales_lowest_price = 11,
                  yearly_unit_sales_highest_price = 11):
         
@@ -81,8 +89,9 @@ class ProductVariablesRanges:
         # the number of people (full time equivalents) on the development team
         self.development_ftes = development_ftes
 
-        # the number of people that need to keep working on the product after development
+        # the people that need to keep working on the product after development
         self.maintenance_ftes = maintenance_ftes
+        self.years_of_maintenance = years_of_maintenance
         
         # the cost to manufacture one unit of the product (in present dollars)
         self.unit_cost_pv = unit_cost_pv
@@ -92,7 +101,6 @@ class ProductVariablesRanges:
 
         # the percentage of the selling price that is allocated to cover selling, general, and administrative expenses        
         self.sga_factor = sga_factor
-        self.sga_annual_fixed = sga_annual_fixed
 
         # the number of units that are expected to be sold per year
         self.yearly_unit_sales_lowest_price = yearly_unit_sales_lowest_price
@@ -103,7 +111,34 @@ class ProductVariablesRanges:
     
     def highest_price(self):
         return safe_index(self.unit_cost_pv, 2) * cost_factor(safe_index(self.unit_margin, 2))
+    
+    @classmethod
+    def market_of(
+        cls,
+        existing_instance,
+        unit_margin,
+        sga_factor,
+        yearly_unit_sales_lowest_price,
+        yearly_unit_sales_highest_price):
 
+        return cls(
+            years_before_development = 0,
+            years_of_development_growth = 0,
+            years_of_development_maturity = 0,
+            years_of_development_decline = 0,
+            years_before_sales = existing_instance.years_before_sales,
+            years_of_sales_growth = existing_instance.years_of_sales_growth,
+            years_of_sales_maturity = existing_instance.years_of_sales_maturity,
+            years_of_sales_decline = existing_instance.years_of_sales_decline,
+            development_ftes = 0,
+            maintenance_ftes = 0,
+            years_of_maintenance = 0,
+            unit_cost_pv = existing_instance.unit_cost_pv,
+            unit_margin = unit_margin,
+            sga_factor = sga_factor,
+            yearly_unit_sales_lowest_price = yearly_unit_sales_lowest_price,
+            yearly_unit_sales_highest_price = yearly_unit_sales_highest_price)
+    
 # Return a single random number, given a low, expected, and high range, using a triangular distribution
 # Just return the expected number if requested, or if the range is invalid
 def triangle(a, just_expected = False):
@@ -153,7 +188,6 @@ class ProductVariablesSnapshot:
         self.unit_cost_pv = triangle(product_variables_ranges.unit_cost_pv, tornado != Tornado.OFF and tornado != Tornado.Unit_Cost)
         self.unit_margin = triangle(product_variables_ranges.unit_margin, tornado != Tornado.OFF and tornado != Tornado.Margin)
         self.sga_factor = triangle(product_variables_ranges.sga_factor)
-        self.sga_annual_fixed = triangle(product_variables_ranges.sga_annual_fixed)
 
         # some product variables are dependent on others, so we need to compute them
 
@@ -186,7 +220,6 @@ class ProductVariablesSnapshot:
         month -= self.years_of_development_maturity * 12
         if month < self.years_of_development_decline * 12:
             return self.development_ftes * (1 - month / (self.years_of_development_decline * 12))
-        month -= self.years_before_sales * 12
         if month < self.years_of_maintenance * 12:
             return self.maintenance_ftes
         return 0
@@ -226,6 +259,7 @@ class NpvCalculationResult:
         self.cost_of_goods = 0
         self.sga = 0
         self.unit_sales = 0
+        self.ftes_by_month = []
 
     def npv(self):
         return self.sales - self.cost_of_goods - self.sga - self.development_cost
@@ -245,12 +279,17 @@ class NpvCalculationResult:
             return 0
         return (1 + self.roi()) ** (1 / years) - 1
     
+    def record_ftes(self, month, ftes):
+        add_value_to_index(self.ftes_by_month, month, ftes)
+    
     def add(self, result):
         self.development_cost += result.development_cost
         self.sales += result.sales
         self.cost_of_goods += result.cost_of_goods
         self.sga += result.sga
         self.unit_sales += result.unit_sales
+        for month in range(len(result.ftes_by_month)):
+            add_value_to_index(self.ftes_by_month, month, result.ftes_by_month[month])
 
 # Calculate the NPV of a product
 def calculate_product_npv(product_variables_snapshot, company_constants):
@@ -271,7 +310,6 @@ def calculate_product_npv(product_variables_snapshot, company_constants):
         monthly_development_cost_fte_fv = fv(company_constants.yearly_development_fte_cost_pv / 12, company_constants.development_trend / 12, month)
         unit_cost_fv = fv(product_variables_snapshot.unit_cost_pv, company_constants.cost_trend / 12, month)
         unit_price_fv = fv(product_variables_snapshot.unit_price_pv, company_constants.price_trend / 12, month)
-        sga_fixed_fv = fv(product_variables_snapshot.sga_annual_fixed / 12, company_constants.price_trend / 12, month)
         sga_variable_fv = unit_price_fv * product_variables_snapshot.sga_factor
 
         # add the results for this month to the total
@@ -279,8 +317,8 @@ def calculate_product_npv(product_variables_snapshot, company_constants):
         product_result.sales += pv(unit_sales * unit_price_fv, company_constants.market_return / 12, month)
         product_result.cost_of_goods += pv(unit_sales * unit_cost_fv, company_constants.market_return / 12, month)
         product_result.sga += pv(unit_sales * sga_variable_fv, company_constants.market_return / 12, month)
-        product_result.sga += pv(sga_fixed_fv, company_constants.market_return / 12, month)
         product_result.unit_sales += unit_sales
+        product_result.record_ftes(month, development_ftes)
 
     return product_result
 
@@ -300,6 +338,8 @@ class SimulationTracker:
         self.unit_sales = []
         self.sales_millions = []
         self.ros = []
+        self.roi = []
+        self.ftes_by_month = []
     
     def add(self, result):
         self.npvs_millions.append(result.npv() / 1000000)
@@ -307,6 +347,9 @@ class SimulationTracker:
         self.unit_sales.append(result.unit_sales)
         self.sales_millions.append(result.sales / 1000000)
         self.ros.append(result.ros() * 100)
+        self.roi.append(result.roi() * 100)
+        for month in range(len(result.ftes_by_month)):
+            add_value_to_index(self.ftes_by_month, month, result.ftes_by_month[month])
 
 class TornadoTracker:
     def __init__(self, tornado, name):
@@ -340,10 +383,15 @@ class MonteCarloAnalyzer:
 
     def analyze(self):
         # compute the monte carlo analysis
-        for i in range(4000):
+        simulations = 4000
+        for i in range(simulations):
             mix_variables_snapshot = MixVariablesSnapshot(self.mix_variables_ranges)
             result = calculate_mix_npv(mix_variables_snapshot, self.company_constants)
             self.simulation_tracker.add(result)
+
+        # Normalize FTEs by dividing each value by the number of simulations
+        for month in range(len(self.simulation_tracker.ftes_by_month)):
+            self.simulation_tracker.ftes_by_month[month] /= simulations
 
         # compute the tornado analysis
         for i in range(100):    
@@ -367,10 +415,20 @@ class MonteCarloAnalyzer:
         plt.subplot(rows, cols, subplot_position)
         plt.barh(names, ranges, left=min_values)
         plt.xlabel(xlabel)
+    
+    # create a line chart for FTEs by month
+    def create_ftes_plot(self, data, subplot_position, rows, cols, color = 'blue'):
+        plt.subplot(rows, cols, subplot_position)
+        plt.plot(data, color=color)
+        plt.xlabel('Year')
+        plt.ylabel('FTEs')
+        plt.title('FTEs by Year')
+        xticks = plt.gca().get_xticks()
+        plt.gca().set_xticklabels([int(x / 12) for x in xticks])        
 
     # plot the results
     def plot(self, file_path = ""):
-        rows = 2
+        rows = 3
         cols = 3
         plt.figure(figsize=(10, 5))
 
@@ -379,11 +437,14 @@ class MonteCarloAnalyzer:
         self.create_histogram(self.simulation_tracker.development_costs_millions, 20, 'Development ($ millions)', 3, rows, cols, 'green')
         self.create_histogram(self.simulation_tracker.npvs_millions, 20, 'NPV ($ millions)', 4, rows, cols, 'purple')
         self.create_histogram(self.simulation_tracker.ros, 20, 'ROS (%)', 5, rows, cols, 'orange')
+        self.create_histogram(self.simulation_tracker.roi, 20, 'ROI (%)', 6, rows, cols, 'pink')
 
         tornado_names = [tornado_tracker.name for tornado_tracker in self.tornado_trackers]
         tornado_ranges = [tornado_tracker.range() for tornado_tracker in self.tornado_trackers]
         tornado_min_values = [tornado_tracker.min_value for tornado_tracker in self.tornado_trackers]
-        self.create_tornado_plot(tornado_names, tornado_ranges, tornado_min_values, 'NPV Sensitivity ($ millions)', 6, rows, cols)
+        self.create_tornado_plot(tornado_names, tornado_ranges, tornado_min_values, 'NPV Sensitivity ($ millions)', 7, rows, cols)
+
+        self.create_ftes_plot(self.simulation_tracker.ftes_by_month, 8, rows, cols, 'black')
 
         plt.tight_layout()
         if( file_path != ""):
@@ -461,62 +522,37 @@ else:
 
     product1 = ProductVariablesRanges(
         years_before_development = 0,
-        years_of_development_growth = 0,
-        years_of_development_maturity = 2,
-        years_of_development_decline = 0,
+        years_of_development_growth = 1,
+        years_of_development_maturity = [0.5,1,1.5],
+        years_of_development_decline = 1,
         years_before_sales = 0,
         years_of_sales_growth = 0,
-        years_of_sales_maturity = 12,
+        years_of_sales_maturity = [10,11,12],
         years_of_sales_decline = 0,
-        development_ftes = 5,
-        maintenance_ftes = [0,0.2,0.5],
-        years_of_maintenance = 0,
-        unit_cost_pv = 21300,
-        unit_margin = 0.68,
+        development_ftes = [2,3,4],
+        maintenance_ftes = [0,0.1,0.25],
+        years_of_maintenance = 10,
+        unit_cost_pv = [31000,33700,36000],
+        unit_margin = 0.53,
         sga_factor = 0.31,
-        sga_annual_fixed = 0,
-        yearly_unit_sales_lowest_price = 2,
-        yearly_unit_sales_highest_price = 2)
+        yearly_unit_sales_lowest_price = 20,
+        yearly_unit_sales_highest_price = 20)
 
-    product2 = ProductVariablesRanges(
-        years_before_development = 0,
-        years_of_development_growth = 0,
-        years_of_development_maturity = 0,
-        years_of_development_decline = 0,
-        years_before_sales = 0,
-        years_of_sales_growth = 0,
-        years_of_sales_maturity = 12,
-        years_of_sales_decline = 0,
-        development_ftes = 0,
-        maintenance_ftes = 0,
-        years_of_maintenance = 0,
-        unit_cost_pv = 21300,
-        unit_margin = 0.68,
+    product2 = ProductVariablesRanges.market_of(
+        product1,
+        unit_margin = 0.59,
         sga_factor = 0.31,
-        sga_annual_fixed = 0,
-        yearly_unit_sales_lowest_price = 9,
-        yearly_unit_sales_highest_price = 9)
+        yearly_unit_sales_lowest_price = 15,
+        yearly_unit_sales_highest_price = 15)
 
-    product3 = ProductVariablesRanges(
-        years_before_development = 0,
-        years_of_development_growth = 0,
-        years_of_development_maturity = 0,
-        years_of_development_decline = 0,
-        years_before_sales = 0,
-        years_of_sales_growth = 0,
-        years_of_sales_maturity = 12,
-        years_of_sales_decline = 0,
-        development_ftes = 0,
-        maintenance_ftes = 0,
-        years_of_maintenance = 0,
-        unit_cost_pv = 21300,
-        unit_margin = 0.57,
+    product3 = ProductVariablesRanges.market_of(
+        product1,
+        unit_margin = 0.38,
         sga_factor = 0.31,
-        sga_annual_fixed = 0,
-        yearly_unit_sales_lowest_price = 5,
-        yearly_unit_sales_highest_price = 5)
+        yearly_unit_sales_lowest_price = 6,
+        yearly_unit_sales_highest_price = 6)
 
-    mix_variables_ranges = [product1, product2, product3]
+    mix_variables_ranges = [product1]
 
 # Run the Monte Carlo simulation
 monte_carlo = MonteCarloAnalyzer(company_constants, mix_variables_ranges)
