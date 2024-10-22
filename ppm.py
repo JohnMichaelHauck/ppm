@@ -27,11 +27,12 @@ def add_value_to_index(array, index, value):
 # Company Constants (user input)
 class CompanyConstants:
     def __init__(self,
-                 market_return = 0.05,
+                 market_return = 0.03,
                  yearly_development_fte_cost_pv = 17000,
                  development_trend = 0.03,
                  cost_trend = 0.03,
-                 price_trend = 0.03):
+                 price_trend = 0.03,
+                 maximum_development_ftes = 6):
         
         # what we would expect to earn on an investment in a financial market with a similar risk
         self.market_return = market_return
@@ -43,6 +44,9 @@ class CompanyConstants:
         self.development_trend = development_trend
         self.cost_trend = cost_trend
         self.price_trend = price_trend
+
+        # staff size limit
+        self.maximum_development_ftes = maximum_development_ftes
 
 # Return the value of a range, or a single value if it is not a range
 def safe_index(range, i):
@@ -57,11 +61,10 @@ def cost_factor(margin):
 # Product Variables Ranges (user input)
 class ProductVariablesRanges:
     def __init__(self,
-                 years_before_development = 0,
                  years_of_development_growth = 0,
                  years_of_development_maturity = 2,
                  years_of_development_decline = 0,
-                 years_before_sales = 0,
+                 years_of_kumbia = 0,
                  years_of_sales_growth = 0,
                  years_of_sales_maturity = 12,
                  years_of_sales_decline = 0,
@@ -75,13 +78,13 @@ class ProductVariablesRanges:
                  yearly_unit_sales_highest_price = 11):
         
         # development years profile
-        self.years_before_development = years_before_development
+        self.years_mix_delay = 0
         self.years_of_development_growth = years_of_development_growth
         self.years_of_development_maturity = years_of_development_maturity
         self.years_of_development_decline = years_of_development_decline
 
         # sales years profile
-        self.years_before_sales = years_before_sales
+        self.years_of_kumbia = years_of_kumbia
         self.years_of_sales_growth = years_of_sales_growth
         self.years_of_sales_maturity = years_of_sales_maturity
         self.years_of_sales_decline = years_of_sales_decline
@@ -122,11 +125,10 @@ class ProductVariablesRanges:
         yearly_unit_sales_highest_price):
 
         return cls(
-            years_before_development = 0,
             years_of_development_growth = 0,
             years_of_development_maturity = 0,
             years_of_development_decline = 0,
-            years_before_sales = existing_instance.years_before_sales,
+            years_of_kumbia = existing_instance.years_of_kumbia,
             years_of_sales_growth = existing_instance.years_of_sales_growth,
             years_of_sales_maturity = existing_instance.years_of_sales_maturity,
             years_of_sales_decline = existing_instance.years_of_sales_decline,
@@ -174,14 +176,14 @@ class ProductVariablesSnapshot:
     def __init__(self, product_variables_ranges, tornado = Tornado.OFF):
         
         # convert various ranges to actual values using a triangular distribution (or use the likely value if a tornado sensitivity analysis is being performed)
+        self.years_mix_delay = 0
         self.development_ftes = triangle(product_variables_ranges.development_ftes, tornado != Tornado.OFF and tornado != Tornado.Dev_Ftes)
-        self.years_before_development = triangle(product_variables_ranges.years_before_development)
         self.years_of_development_growth = triangle(product_variables_ranges.years_of_development_growth)
         self.years_of_development_maturity = triangle(product_variables_ranges.years_of_development_maturity, tornado != Tornado.OFF and tornado != Tornado.Dev_Years)
         self.years_of_development_decline = triangle(product_variables_ranges.years_of_development_decline)
         self.maintenance_ftes = triangle(product_variables_ranges.maintenance_ftes, tornado != Tornado.OFF and tornado != Tornado.Maint_Ftes)
         self.years_of_maintenance = triangle(product_variables_ranges.years_of_maintenance)
-        self.years_before_sales = triangle(product_variables_ranges.years_before_sales)
+        self.years_of_kumbia = triangle(product_variables_ranges.years_of_kumbia)
         self.years_of_sales_growth = triangle(product_variables_ranges.years_of_sales_growth)
         self.years_of_sales_maturity = triangle(product_variables_ranges.years_of_sales_maturity, tornado != Tornado.OFF and tornado != Tornado.Sales_Years)
         self.years_of_sales_decline = triangle(product_variables_ranges.years_of_sales_decline)
@@ -205,43 +207,41 @@ class ProductVariablesSnapshot:
         self.yearly_unit_sales = triangle(yearly_unit_sales_range, tornado != Tornado.OFF and tornado != Tornado.Yearly_Sales)
 
         # precalculate the total remaining years
-        self.total_remaining_years = self.years_before_development + self.years_of_development_growth + self.years_of_development_maturity + self.years_of_development_decline + self.years_before_sales + self.years_of_sales_growth + self.years_of_sales_maturity + self.years_of_sales_decline
+        self.years_before_sales = self.years_of_development_growth + self.years_of_development_maturity + self.years_of_development_decline + self.years_of_kumbia
+        self.total_years = self.years_before_sales + self.years_of_sales_growth + self.years_of_sales_maturity + self.years_of_sales_decline
+
+        # precalculate the development full time equivalents for each month
+        self.ftes_by_month = []
+        for month in range (round(self.years_of_development_growth * 12)):
+            self.ftes_by_month.append(self.development_ftes * month / (self.years_of_development_growth * 12))
+        for month in range (round(self.years_of_development_maturity * 12)):
+            self.ftes_by_month.append(self.development_ftes)
+        for month in range (round(self.years_of_development_decline * 12)):
+            self.ftes_by_month.append(self.development_ftes * (1 - month / (self.years_of_development_decline * 12)))
+        for month in range (round(self.years_of_maintenance * 12)):
+            self.ftes_by_month.append(self.maintenance_ftes)
+
+        # precalculate the unit sales for a given month
+        self.unit_sales_by_month = []
+        for month in range (round(self.years_of_sales_growth * 12)):
+            self.unit_sales_by_month.append(self.yearly_unit_sales * month / (self.years_of_sales_growth * 12) / 12)
+        for month in range (round(self.years_of_sales_maturity * 12)):
+            self.unit_sales_by_month.append(self.yearly_unit_sales / 12)
+        for month in range (round(self.years_of_sales_decline * 12)):
+            self.unit_sales_by_month.append(self.yearly_unit_sales * (1 - month / (self.years_of_sales_decline * 12)) / 12)
 
     # compute the development full time equivalents for a given month
-    def development_ftes_this_month(self, month):
-        if month < self.years_before_development * 12:
-            return 0
-        month -= self.years_before_development * 12
-        if month < self.years_of_development_growth * 12:
-            return self.development_ftes * month / (self.years_of_development_growth * 12)
-        month -= self.years_of_development_growth * 12
-        if month < self.years_of_development_maturity * 12:
-            return self.development_ftes
-        month -= self.years_of_development_maturity * 12
-        if month < self.years_of_development_decline * 12:
-            return self.development_ftes * (1 - month / (self.years_of_development_decline * 12))
-        if month < self.years_of_maintenance * 12:
-            return self.maintenance_ftes
-        return 0
+    def development_ftes_this_mix_month(self, month):
+        month -= self.years_mix_delay * 12
+        month = round(month)
+        return self.ftes_by_month[month] if 0 <= month < len(self.ftes_by_month) else 0
     
     # compute the unit sales for a given month
-    def unit_sales_this_month(self, month):
-        month -= self.years_before_development * 12
-        month -= self.years_of_development_growth * 12
-        month -= self.years_of_development_maturity * 12
-        month -= self.years_of_development_decline * 12
-        if month < self.years_before_sales * 12:
-            return 0
+    def unit_sales_this_mix_month(self, month):
+        month -= self.years_mix_delay * 12
         month -= self.years_before_sales * 12
-        if month < self.years_of_sales_growth * 12:
-            return self.yearly_unit_sales * month / (self.years_of_sales_growth * 12) / 12
-        month -= self.years_of_sales_growth * 12
-        if month < self.years_of_sales_maturity * 12:
-            return self.yearly_unit_sales / 12
-        month -= self.years_of_sales_maturity * 12
-        if month < self.years_of_sales_decline * 12:
-            return self.yearly_unit_sales * (1 - month / (self.years_of_sales_decline * 12)) / 12
-        return 0
+        month = round(month)
+        return self.unit_sales_by_month[month] if 0 <= month < len(self.unit_sales_by_month) else 0
 
 # Create a snapshot of the mix of product variables with random values
 class MixVariablesSnapshot:
@@ -298,34 +298,51 @@ def calculate_product_npv(product_variables_snapshot, company_constants):
     product_result = NpvCalculationResult()
 
     # loop through all the months
-    for month in range(round(product_variables_snapshot.years_before_development * 12), round(product_variables_snapshot.total_remaining_years * 12) + 1):
+    for month in range(round(product_variables_snapshot.total_years * 12) + 1):
+        mix_month = month + round(product_variables_snapshot.years_mix_delay * 12)
     
         # compute the development_ftes for this month
-        development_ftes = product_variables_snapshot.development_ftes_this_month(month)
+        development_ftes = product_variables_snapshot.development_ftes_this_mix_month(mix_month)
 
         # compute the unit sales for this month
-        unit_sales = product_variables_snapshot.unit_sales_this_month(month)
+        unit_sales = product_variables_snapshot.unit_sales_this_mix_month(mix_month)
 
         # compute the future value of the cost of development, unit cost, unit price, and sg&a for this month
-        monthly_development_cost_fte_fv = fv(company_constants.yearly_development_fte_cost_pv / 12, company_constants.development_trend / 12, month)
-        unit_cost_fv = fv(product_variables_snapshot.unit_cost_pv, company_constants.cost_trend / 12, month)
-        unit_price_fv = fv(product_variables_snapshot.unit_price_pv, company_constants.price_trend / 12, month)
+        monthly_development_cost_fte_fv = fv(company_constants.yearly_development_fte_cost_pv / 12, company_constants.development_trend / 12, mix_month)
+        unit_cost_fv = fv(product_variables_snapshot.unit_cost_pv, company_constants.cost_trend / 12, mix_month)
+        unit_price_fv = fv(product_variables_snapshot.unit_price_pv, company_constants.price_trend / 12, mix_month)
         sga_variable_fv = unit_price_fv * product_variables_snapshot.sga_factor
 
         # add the results for this month to the total
-        product_result.development_cost += pv(development_ftes * monthly_development_cost_fte_fv, company_constants.market_return / 12, month)
-        product_result.sales += pv(unit_sales * unit_price_fv, company_constants.market_return / 12, month)
-        product_result.cost_of_goods += pv(unit_sales * unit_cost_fv, company_constants.market_return / 12, month)
-        product_result.sga += pv(unit_sales * sga_variable_fv, company_constants.market_return / 12, month)
+        product_result.development_cost += pv(development_ftes * monthly_development_cost_fte_fv, company_constants.market_return / 12, mix_month)
+        product_result.sales += pv(unit_sales * unit_price_fv, company_constants.market_return / 12, mix_month)
+        product_result.cost_of_goods += pv(unit_sales * unit_cost_fv, company_constants.market_return / 12, mix_month)
+        product_result.sga += pv(unit_sales * sga_variable_fv, company_constants.market_return / 12, mix_month)
         product_result.unit_sales += unit_sales
-        product_result.record_ftes(month, development_ftes)
+        product_result.record_ftes(mix_month, development_ftes)
 
     return product_result
+
+# Calculate the years mix delay based on the maximum development FTEs
+def calculate_years_mix_delay(maximum_development_ftes, allocated_ftes_by_month, new_ftes_by_month):
+    months_mix_delay = 0
+    maximum_development_ftes = max(maximum_development_ftes, max(new_ftes_by_month))
+    allocated_ftes_by_month.extend([0] * len(new_ftes_by_month))
+    while(True):
+        overallocated = False
+        for month in range(len(new_ftes_by_month)):
+            if allocated_ftes_by_month[month + months_mix_delay] + new_ftes_by_month[month] > maximum_development_ftes:
+                overallocated = True
+                break
+        if not overallocated:
+            return months_mix_delay / 12
+        months_mix_delay += 1
 
 # Calculate the NPV of a product mix
 def calculate_mix_npv(mix_variables_snapshot, company_constants):
     mix_result = NpvCalculationResult()
     for product_variables_snapshot in mix_variables_snapshot.mix_variables_snapshots:
+        product_variables_snapshot.years_mix_delay = calculate_years_mix_delay(company_constants.maximum_development_ftes, mix_result.ftes_by_month, product_variables_snapshot.ftes_by_month)
         product_result = calculate_product_npv(product_variables_snapshot, company_constants)
         mix_result.add(product_result)
     return mix_result
@@ -389,7 +406,7 @@ class MonteCarloAnalyzer:
             result = calculate_mix_npv(mix_variables_snapshot, self.company_constants)
             self.simulation_tracker.add(result)
 
-        # Normalize FTEs by dividing each value by the number of simulations
+        # normalize FTEs by dividing each value by the number of simulations
         for month in range(len(self.simulation_tracker.ftes_by_month)):
             self.simulation_tracker.ftes_by_month[month] /= simulations
 
@@ -419,12 +436,11 @@ class MonteCarloAnalyzer:
     # create a line chart for FTEs by month
     def create_ftes_plot(self, data, subplot_position, rows, cols, color = 'blue'):
         plt.subplot(rows, cols, subplot_position)
-        plt.plot(data, color=color)
+        years = np.arange(len(data)) / 12
+        plt.plot(years, data, color=color)
         plt.xlabel('Year')
         plt.ylabel('FTEs')
         plt.title('FTEs by Year')
-        xticks = plt.gca().get_xticks()
-        plt.gca().set_xticklabels([int(x / 12) for x in xticks])        
 
     # plot the results
     def plot(self, file_path = ""):
@@ -476,11 +492,10 @@ def read_excel_data(file_path):
         ]
     
     # Extract values from the DataFrame
-    years_before_development = convert(product_variables_sheet, 2)
     years_of_development_growth = convert(product_variables_sheet, 3)
     years_of_development_maturity = convert(product_variables_sheet, 4)
     years_of_development_decline = convert(product_variables_sheet, 5)
-    years_before_sales = convert(product_variables_sheet, 6)
+    years_of_kumbia = convert(product_variables_sheet, 6)
     years_of_sales_growth = convert(product_variables_sheet, 7)
     years_of_sales_maturity = convert(product_variables_sheet, 8)
     years_of_sales_decline = convert(product_variables_sheet, 9)
@@ -492,7 +507,7 @@ def read_excel_data(file_path):
     yearly_unit_sales_at_25200 = convert(product_variables_sheet, 15)
 
     # Initialize the ProductVariablesRanges instance
-    product_variables_ranges = ProductVariablesRanges(years_before_development, years_of_development_growth, years_of_development_maturity, years_of_development_decline, years_before_sales, years_of_sales_growth, years_of_sales_maturity, years_of_sales_decline, development_ftes, maintenance_ftes, unit_cost_pv, unit_margin, yearly_unit_sales_at_15200, yearly_unit_sales_at_25200)
+    product_variables_ranges = ProductVariablesRanges(0, years_of_development_growth, years_of_development_maturity, years_of_development_decline, years_of_kumbia, years_of_sales_growth, years_of_sales_maturity, years_of_sales_decline, development_ftes, maintenance_ftes, unit_cost_pv, unit_margin, yearly_unit_sales_at_15200, yearly_unit_sales_at_25200)
 
     return company_constants, product_variables_ranges
 
@@ -521,38 +536,54 @@ else:
     company_constants = CompanyConstants()
 
     product1 = ProductVariablesRanges(
-        years_before_development = 0,
-        years_of_development_growth = 1,
-        years_of_development_maturity = [0.5,1,1.5],
-        years_of_development_decline = 1,
-        years_before_sales = 0,
+        years_of_development_growth = 0,
+        years_of_development_maturity = 3,
+        years_of_development_decline = 0,
+        years_of_kumbia = 0,
         years_of_sales_growth = 0,
         years_of_sales_maturity = [10,11,12],
         years_of_sales_decline = 0,
-        development_ftes = [2,3,4],
+        development_ftes = 5,
         maintenance_ftes = [0,0.1,0.25],
-        years_of_maintenance = 10,
+        years_of_maintenance = 0,
         unit_cost_pv = [31000,33700,36000],
-        unit_margin = 0.53,
+        unit_margin = [0.55,0.58,0.60],
         sga_factor = 0.31,
-        yearly_unit_sales_lowest_price = 20,
-        yearly_unit_sales_highest_price = 20)
+        yearly_unit_sales_lowest_price = [35,40,45],
+        yearly_unit_sales_highest_price = [20,25,30])
 
-    product2 = ProductVariablesRanges.market_of(
+    product1b = ProductVariablesRanges.market_of(
         product1,
         unit_margin = 0.59,
         sga_factor = 0.31,
         yearly_unit_sales_lowest_price = 15,
         yearly_unit_sales_highest_price = 15)
 
-    product3 = ProductVariablesRanges.market_of(
+    product1c = ProductVariablesRanges.market_of(
         product1,
         unit_margin = 0.38,
         sga_factor = 0.31,
         yearly_unit_sales_lowest_price = 6,
         yearly_unit_sales_highest_price = 6)
 
-    mix_variables_ranges = [product1]
+    product2 = ProductVariablesRanges(
+        years_of_development_growth = 0,
+        years_of_development_maturity = 3,
+        years_of_development_decline = 0,
+        years_of_kumbia = 0,
+        years_of_sales_growth = 0,
+        years_of_sales_maturity = [10,11,12],
+        years_of_sales_decline = 0,
+        development_ftes = 5,
+        maintenance_ftes = [0,0.1,0.25],
+        years_of_maintenance = 0,
+        unit_cost_pv = [31000,33700,36000],
+        unit_margin = [0.55,0.58,0.60],
+        sga_factor = 0.31,
+        yearly_unit_sales_lowest_price = [35,40,45],
+        yearly_unit_sales_highest_price = [20,25,30])
+
+    mix_variables_ranges = [product1, product2]
 
 # Run the Monte Carlo simulation
 monte_carlo = MonteCarloAnalyzer(company_constants, mix_variables_ranges)
