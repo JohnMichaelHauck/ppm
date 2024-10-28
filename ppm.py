@@ -74,8 +74,7 @@ class ProductVariablesRanges:
                  unit_cost_pv = 0,
                  unit_margin = 0,
                  sga_factor = 0,
-                 yearly_unit_sales_lowest_price = 0,
-                 yearly_unit_sales_highest_price = 0):
+                 yearly_unit_sales = 0):
         
         # development years profile
         self.years_mix_delay = 0
@@ -106,14 +105,7 @@ class ProductVariablesRanges:
         self.sga_factor = sga_factor
 
         # the number of units that are expected to be sold per year
-        self.yearly_unit_sales_lowest_price = yearly_unit_sales_lowest_price
-        self.yearly_unit_sales_highest_price = yearly_unit_sales_highest_price
-
-    def lowest_price(self):
-        return safe_index(self.unit_cost_pv, 0) * cost_factor(safe_index(self.unit_margin, 0))
-    
-    def highest_price(self):
-        return safe_index(self.unit_cost_pv, 2) * cost_factor(safe_index(self.unit_margin, 2))
+        self.yearly_unit_sales = yearly_unit_sales
     
     @classmethod
     def market_of(
@@ -121,8 +113,7 @@ class ProductVariablesRanges:
         existing_instance,
         unit_margin,
         sga_factor,
-        yearly_unit_sales_lowest_price,
-        yearly_unit_sales_highest_price):
+        yearly_unit_sales):
 
         return cls(
             years_of_development_growth = 0,
@@ -138,8 +129,7 @@ class ProductVariablesRanges:
             unit_cost_pv = existing_instance.unit_cost_pv,
             unit_margin = unit_margin,
             sga_factor = sga_factor,
-            yearly_unit_sales_lowest_price = yearly_unit_sales_lowest_price,
-            yearly_unit_sales_highest_price = yearly_unit_sales_highest_price)
+            yearly_unit_sales = yearly_unit_sales)
     
 # Return a single random number, given a low, expected, and high range, using a triangular distribution
 # Just return the expected number if requested, or if the range is invalid
@@ -190,22 +180,11 @@ class ProductVariablesSnapshot:
         self.unit_cost_pv = triangle(product_variables_ranges.unit_cost_pv, tornado != Tornado.OFF and tornado != Tornado.Unit_Cost)
         self.unit_margin = triangle(product_variables_ranges.unit_margin, tornado != Tornado.OFF and tornado != Tornado.Margin)
         self.sga_factor = triangle(product_variables_ranges.sga_factor)
-
-        # some product variables are dependent on others, so we need to compute them
+        self.yearly_unit_sales = triangle(product_variables_ranges.yearly_unit_sales, tornado != Tornado.OFF and tornado != Tornado.Yearly_Sales)
 
         # compute the unit price
         self.unit_price_pv = self.unit_cost_pv * cost_factor(self.unit_margin)
-
-        # interpolate the yearly unit sales range as a function of the unit price
-        price_range = np.array([product_variables_ranges.lowest_price(), product_variables_ranges.highest_price()])
-        yearly_unit_sales_range = [0, 0, 0]
-        for i in range(3):
-            sales_range_i = np.array([safe_index(product_variables_ranges.yearly_unit_sales_lowest_price, i), safe_index(product_variables_ranges.yearly_unit_sales_highest_price, i)])
-            yearly_unit_sales_range[i] = np.interp(self.unit_price_pv, price_range, sales_range_i)
         
-        # convert the sales range to an actual value using a triangular distribution
-        self.yearly_unit_sales = triangle(yearly_unit_sales_range, tornado != Tornado.OFF and tornado != Tornado.Yearly_Sales)
-
         # precalculate the total remaining years
         self.years_before_sales = self.years_of_development_growth + self.years_of_development_maturity + self.years_of_development_decline + self.years_of_kumbia
         self.total_years = self.years_before_sales + self.years_of_sales_growth + self.years_of_sales_maturity + self.years_of_sales_decline
@@ -556,15 +535,13 @@ def read_excel_data(file_path):
                 unit_cost_pv = range_from_label(pvr_sheet, pvr_sheet_row, "Unit Cost"),
                 unit_margin = range_from_label(pvr_sheet, pvr_sheet_row, "Unit Margin"),
                 sga_factor = range_from_label(pvr_sheet, pvr_sheet_row, "SG&A"),
-                yearly_unit_sales_lowest_price = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales at Lowest Price"),
-                yearly_unit_sales_highest_price = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales at Highest Price"))
+                yearly_unit_sales = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales"))
         else:
             product_variables_ranges = ProductVariablesRanges.market_of(
                 existing_instance = product_variables_ranges,
                 unit_margin = range_from_label(pvr_sheet, pvr_sheet_row, "Unit Margin"),
                 sga_factor = range_from_label(pvr_sheet, pvr_sheet_row, "SG&A"),
-                yearly_unit_sales_lowest_price = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales at Lowest Price"),
-                yearly_unit_sales_highest_price = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales at Highest Price"))
+                yearly_unit_sales = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales"))
         
         if( pvr_exclude == None):
             mix_variables_ranges.append(product_variables_ranges)
