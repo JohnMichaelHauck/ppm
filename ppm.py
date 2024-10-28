@@ -27,26 +27,26 @@ def add_value_to_index(array, index, value):
 # Company Constants (user input)
 class CompanyConstants:
     def __init__(self,
-                 market_return = 0.03,
-                 development_cost_trend = 0.03,
-                 product_cost_trend = 0.03,
-                 product_price_trend = 0.03,
+                 market_return = 0.0,
                  yearly_development_fte_cost_pv = 17000,
-                 maximum_development_ftes = 6):
+                 maximum_development_ftes = 6,
+                 development_cost_trend = 0.0,
+                 product_cost_trend = 0.0,
+                 product_price_trend = 0.0):
         
         # what we would expect to earn on an investment in a financial market with a similar risk
         self.market_return = market_return
         
-        # how much things increase each year
-        self.development_cost_trend = development_cost_trend
-        self.product_cost_trend = product_cost_trend
-        self.product_price_trend = product_price_trend
-
         # how much it costs per person to run a product development team (in present dollars)
         self.yearly_development_fte_cost_pv = yearly_development_fte_cost_pv
 
         # staff size limit
         self.maximum_development_ftes = maximum_development_ftes
+
+        # how much things increase each year
+        self.development_cost_trend = development_cost_trend
+        self.product_cost_trend = product_cost_trend
+        self.product_price_trend = product_price_trend
 
 # Return the value of a range, or a single value if it is not a range
 def safe_index(range, i):
@@ -62,20 +62,20 @@ def cost_factor(margin):
 class ProductVariablesRanges:
     def __init__(self,
                  years_of_development_growth = 0,
-                 years_of_development_maturity = 2,
+                 years_of_development_maturity = 0,
                  years_of_development_decline = 0,
                  years_of_kumbia = 0,
                  years_of_sales_growth = 0,
-                 years_of_sales_maturity = 12,
+                 years_of_sales_maturity = 0,
                  years_of_sales_decline = 0,
-                 development_ftes = 5,
+                 development_ftes = 0,
                  maintenance_ftes = 0,
-                 years_of_maintenance = 3,
-                 unit_cost_pv = 21300,
-                 unit_margin = 0.677272727,
-                 sga_factor = 0.31,
-                 yearly_unit_sales_lowest_price = 11,
-                 yearly_unit_sales_highest_price = 11):
+                 years_of_maintenance = 0,
+                 unit_cost_pv = 0,
+                 unit_margin = 0,
+                 sga_factor = 0,
+                 yearly_unit_sales_lowest_price = 0,
+                 yearly_unit_sales_highest_price = 0):
         
         # development years profile
         self.years_mix_delay = 0
@@ -135,7 +135,6 @@ class ProductVariablesRanges:
             development_ftes = 0,
             maintenance_ftes = 0,
             years_of_maintenance = 0,
-            unit_cost_pv = existing_instance.unit_cost_pv,
             unit_margin = unit_margin,
             sga_factor = sga_factor,
             yearly_unit_sales_lowest_price = yearly_unit_sales_lowest_price,
@@ -220,6 +219,8 @@ class ProductVariablesSnapshot:
             self.ftes_by_month.append(self.development_ftes * (1 - month / (self.years_of_development_decline * 12)))
         for month in range (round(self.years_of_maintenance * 12)):
             self.ftes_by_month.append(self.maintenance_ftes)
+        if (len(self.ftes_by_month) == 0):
+            self.ftes_by_month.append(0)
 
         # precalculate the unit sales for a given month
         self.unit_sales_by_month = []
@@ -229,6 +230,8 @@ class ProductVariablesSnapshot:
             self.unit_sales_by_month.append(self.yearly_unit_sales / 12)
         for month in range (round(self.years_of_sales_decline * 12)):
             self.unit_sales_by_month.append(self.yearly_unit_sales * (1 - month / (self.years_of_sales_decline * 12)) / 12)
+        if (len(self.unit_sales_by_month) == 0):
+            self.unit_sales_by_month.append(0)
 
     # compute the development full time equivalents for a given month
     def development_ftes_this_mix_month(self, month):
@@ -490,46 +493,81 @@ class MonteCarloAnalyzer:
         plt.close()
 
 def read_excel_data(file_path):
-
     # Load the workbook and select the sheets
-    workbook = load_workbook(file_path)
+    workbook = load_workbook(file_path, data_only=True)
     company_constants_sheet = workbook['Company Constants']
-    product_variables_sheet = workbook['Product Variables']
-
-    # Extract values from the DataFrame
-    market_return = company_constants_sheet.cell(row=2, column=2).value
-    yearly_development_fte_cost_pv = company_constants_sheet.cell(row=3, column=2).value
-    product_price_trend = company_constants_sheet.cell(row=4, column=2).value
 
     # Initialize the CompanyConstants instance
-    company_constants = CompanyConstants(market_return, yearly_development_fte_cost_pv, product_price_trend)
+    company_constants = CompanyConstants(
+        market_return = company_constants_sheet.cell(row=2, column=2).value,
+        yearly_development_fte_cost_pv = company_constants_sheet.cell(row=3, column=2).value,
+        maximum_development_ftes = company_constants_sheet.cell(row=4, column=2).value,
+        development_cost_trend = company_constants_sheet.cell(row=5, column=2).value,
+        product_cost_trend = company_constants_sheet.cell(row=6, column=2).value,
+        product_price_trend = company_constants_sheet.cell(row=7, column=2).value)
 
-    def convert(sheet, row):
-        return [
-            sheet.cell(row=row, column=2).value,
-            sheet.cell(row=row, column=3).value,
-            sheet.cell(row=row, column=4).value
-        ]
-    
-    # Extract values from the DataFrame
-    years_of_development_growth = convert(product_variables_sheet, 3)
-    years_of_development_maturity = convert(product_variables_sheet, 4)
-    years_of_development_decline = convert(product_variables_sheet, 5)
-    years_of_kumbia = convert(product_variables_sheet, 6)
-    years_of_sales_growth = convert(product_variables_sheet, 7)
-    years_of_sales_maturity = convert(product_variables_sheet, 8)
-    years_of_sales_decline = convert(product_variables_sheet, 9)
-    development_ftes = convert(product_variables_sheet, 10)
-    maintenance_ftes = convert(product_variables_sheet, 11)
-    unit_cost_pv = convert(product_variables_sheet, 12)
-    unit_margin = convert(product_variables_sheet, 13)
-    yearly_unit_sales_at_15200 = convert(product_variables_sheet, 14)
-    yearly_unit_sales_at_25200 = convert(product_variables_sheet, 15)
+    def row_from_label(sheet, start_row, label):
+        for row in range(start_row, sheet.max_row + 1):
+            cell_value = sheet.cell(row=row, column=1).value
+            if cell_value == label:
+                return row
+        return 0
 
-    # Initialize the ProductVariablesRanges instance
-    product_variables_ranges = ProductVariablesRanges(0, years_of_development_growth, years_of_development_maturity, years_of_development_decline, years_of_kumbia, years_of_sales_growth, years_of_sales_maturity, years_of_sales_decline, development_ftes, maintenance_ftes, unit_cost_pv, unit_margin, yearly_unit_sales_at_15200, yearly_unit_sales_at_25200)
+    def range_from_label(sheet, start_row, label):
+        for row in range(start_row, sheet.max_row + 1):
+            cell_value = sheet.cell(row=row, column=1).value
+            if cell_value == None:
+                return [0,0,0]
+            if cell_value == label:
+                return [
+                    sheet.cell(row=row, column=2).value,
+                    sheet.cell(row=row, column=3).value,
+                    sheet.cell(row=row, column=4).value
+                ]
 
-    return company_constants, product_variables_ranges
+    mix_variables_ranges = []
+    mix_sheet = workbook['Mix']
+    product_variables_ranges = ProductVariablesRanges()
+
+    for row in range(2, mix_sheet.max_row + 1):
+        pvr_sheet_name = mix_sheet.cell(row=row, column=1).value
+        pvr_heading = mix_sheet.cell(row=row, column=2).value
+        pvr_type = mix_sheet.cell(row=row, column=3).value
+        pvr_exclude = mix_sheet.cell(row=row, column=4).value
+        pvr_sheet = workbook[pvr_sheet_name]
+        start_row = row_from_label(pvr_sheet, 1, pvr_heading)
+        if( start_row == 0):
+            continue
+
+        if( pvr_type == "Product"):
+            product_variables_ranges = ProductVariablesRanges(
+                range_from_label(pvr_sheet, row, "Years of Development Growth"),
+                range_from_label(pvr_sheet, row, "Years of Development Maturity"),
+                range_from_label(pvr_sheet, row, "Years of Development Decline"),
+                range_from_label(pvr_sheet, row, "Years of Kumbia"),
+                range_from_label(pvr_sheet, row, "Years of Sales Growth"),
+                range_from_label(pvr_sheet, row, "Years of Sales Maturity"),
+                range_from_label(pvr_sheet, row, "Years of Sales Decline"),
+                range_from_label(pvr_sheet, row, "Development FTEs"),
+                range_from_label(pvr_sheet, row, "Maintenance FTEs"),
+                range_from_label(pvr_sheet, row, "Years of Maintenance"),
+                range_from_label(pvr_sheet, row, "Unit Cost"),
+                range_from_label(pvr_sheet, row, "Unit Margin"),
+                range_from_label(pvr_sheet, row, "SG&A"),
+                range_from_label(pvr_sheet, row, "Yearly Unit Sales at Lowest Price"),
+                range_from_label(pvr_sheet, row, "Yearly Unit Sales at Highest Price"))
+        else:
+            product_variables_ranges = ProductVariablesRanges.market_of(
+                product_variables_ranges,
+                range_from_label(pvr_sheet, row, "Unit Margin"),
+                range_from_label(pvr_sheet, row, "SG&A"),
+                range_from_label(pvr_sheet, row, "Yearly Unit Sales at Lowest Price"),
+                range_from_label(pvr_sheet, row, "Yearly Unit Sales at Highest Price"))
+        
+        if( pvr_exclude == None):
+            mix_variables_ranges.append(product_variables_ranges)
+
+    return company_constants, mix_variables_ranges
 
 def insert_plot_into_excel(excel_file_path_in, excel_file_path_out, image_path):
     # Load the workbook and select the sheet
@@ -549,50 +587,20 @@ def insert_plot_into_excel(excel_file_path_in, excel_file_path_out, image_path):
 if len(sys.argv) == 2:
     excel_file_path = sys.argv[1]
     plot_file_path = os.path.join(tempfile.gettempdir(), 'ppm.png')
-    company_constants, product_variables_ranges = read_excel_data(excel_file_path)
+    company_constants, mix_variables_ranges = read_excel_data(excel_file_path)
 else:
     excel_file_path = ""
     plot_file_path = ""
     company_constants = CompanyConstants()
-
-    product1 = ProductVariablesRanges(
-        years_of_development_growth = 2,
-        years_of_development_maturity = [3,4,5],
-        years_of_development_decline = 1,
-        years_of_kumbia = 0,
-        years_of_sales_growth = 2,
-        years_of_sales_maturity = [10,11,12],
-        years_of_sales_decline = 5,
-        development_ftes = [3,4,5],
-        maintenance_ftes = [0,0.1,0.25],
-        years_of_maintenance = [6,8,10],
-        unit_cost_pv = [31000,33700,36000],
-        unit_margin = [0.55,0.58,0.60],
-        sga_factor = 0.31,
-        yearly_unit_sales_lowest_price = [35,40,45],
-        yearly_unit_sales_highest_price = [20,25,30])
-
-    product1b = ProductVariablesRanges.market_of(
-        product1,
-        unit_margin = 0.59,
-        sga_factor = 0.31,
-        yearly_unit_sales_lowest_price = 15,
-        yearly_unit_sales_highest_price = 15)
-
-    product1c = ProductVariablesRanges.market_of(
-        product1,
-        unit_margin = 0.38,
-        sga_factor = 0.31,
-        yearly_unit_sales_lowest_price = 6,
-        yearly_unit_sales_highest_price = 6)
-
-    mix_variables_ranges = [product1, product1, product1]
+    product1 = ProductVariablesRanges()
+    mix_variables_ranges = [product1]
 
 # Run the Monte Carlo simulation
+plot_file_path = ""
 monte_carlo = MonteCarloAnalyzer(company_constants, mix_variables_ranges)
 monte_carlo.analyze()
 monte_carlo.plot(plot_file_path)
 
 # Save the plot
-if len(sys.argv) == 2:
+if( plot_file_path != ""):
     insert_plot_into_excel(excel_file_path, excel_file_path, plot_file_path)
