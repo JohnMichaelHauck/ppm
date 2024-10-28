@@ -135,6 +135,7 @@ class ProductVariablesRanges:
             development_ftes = 0,
             maintenance_ftes = 0,
             years_of_maintenance = 0,
+            unit_cost_pv = existing_instance.unit_cost_pv,
             unit_margin = unit_margin,
             sga_factor = sga_factor,
             yearly_unit_sales_lowest_price = yearly_unit_sales_lowest_price,
@@ -252,7 +253,8 @@ class MixVariablesSnapshot:
         self.mix_variables_ranges = mix_variables_ranges
         self.mix_variables_snapshots = []
         for product_variables_ranges in mix_variables_ranges:
-            self.mix_variables_snapshots.append(ProductVariablesSnapshot(product_variables_ranges, tornado))
+            product_variables_snapshot = ProductVariablesSnapshot(product_variables_ranges, tornado)
+            self.mix_variables_snapshots.append(product_variables_snapshot)
 
 # The result of a single NPV calculation
 class NpvCalculationResult:
@@ -529,40 +531,40 @@ def read_excel_data(file_path):
     mix_sheet = workbook['Mix']
     product_variables_ranges = ProductVariablesRanges()
 
-    for row in range(2, mix_sheet.max_row + 1):
-        pvr_sheet_name = mix_sheet.cell(row=row, column=1).value
-        pvr_heading = mix_sheet.cell(row=row, column=2).value
-        pvr_type = mix_sheet.cell(row=row, column=3).value
-        pvr_exclude = mix_sheet.cell(row=row, column=4).value
+    for mix_sheet_row in range(2, mix_sheet.max_row + 1):
+        pvr_sheet_name = mix_sheet.cell(row=mix_sheet_row, column=1).value
+        pvr_heading = mix_sheet.cell(row=mix_sheet_row, column=2).value
+        pvr_type = mix_sheet.cell(row=mix_sheet_row, column=3).value
+        pvr_exclude = mix_sheet.cell(row=mix_sheet_row, column=4).value
         pvr_sheet = workbook[pvr_sheet_name]
-        start_row = row_from_label(pvr_sheet, 1, pvr_heading)
-        if( start_row == 0):
+        pvr_sheet_row = row_from_label(pvr_sheet, 1, pvr_heading)
+        if( pvr_sheet_row == 0):
             continue
 
         if( pvr_type == "Product"):
             product_variables_ranges = ProductVariablesRanges(
-                range_from_label(pvr_sheet, row, "Years of Development Growth"),
-                range_from_label(pvr_sheet, row, "Years of Development Maturity"),
-                range_from_label(pvr_sheet, row, "Years of Development Decline"),
-                range_from_label(pvr_sheet, row, "Years of Kumbia"),
-                range_from_label(pvr_sheet, row, "Years of Sales Growth"),
-                range_from_label(pvr_sheet, row, "Years of Sales Maturity"),
-                range_from_label(pvr_sheet, row, "Years of Sales Decline"),
-                range_from_label(pvr_sheet, row, "Development FTEs"),
-                range_from_label(pvr_sheet, row, "Maintenance FTEs"),
-                range_from_label(pvr_sheet, row, "Years of Maintenance"),
-                range_from_label(pvr_sheet, row, "Unit Cost"),
-                range_from_label(pvr_sheet, row, "Unit Margin"),
-                range_from_label(pvr_sheet, row, "SG&A"),
-                range_from_label(pvr_sheet, row, "Yearly Unit Sales at Lowest Price"),
-                range_from_label(pvr_sheet, row, "Yearly Unit Sales at Highest Price"))
+                years_of_development_growth = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Development Growth"),
+                years_of_development_maturity = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Development Maturity"),
+                years_of_development_decline = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Development Decline"),
+                years_of_kumbia = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Kumbia"),
+                years_of_sales_growth = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Sales Growth"),
+                years_of_sales_maturity = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Sales Maturity"),
+                years_of_sales_decline = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Sales Decline"),
+                development_ftes = range_from_label(pvr_sheet, pvr_sheet_row, "Development FTEs"),
+                maintenance_ftes = range_from_label(pvr_sheet, pvr_sheet_row, "Maintenance FTEs"),
+                years_of_maintenance = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Maintenance"),
+                unit_cost_pv = range_from_label(pvr_sheet, pvr_sheet_row, "Unit Cost"),
+                unit_margin = range_from_label(pvr_sheet, pvr_sheet_row, "Unit Margin"),
+                sga_factor = range_from_label(pvr_sheet, pvr_sheet_row, "SG&A"),
+                yearly_unit_sales_lowest_price = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales at Lowest Price"),
+                yearly_unit_sales_highest_price = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales at Highest Price"))
         else:
             product_variables_ranges = ProductVariablesRanges.market_of(
-                product_variables_ranges,
-                range_from_label(pvr_sheet, row, "Unit Margin"),
-                range_from_label(pvr_sheet, row, "SG&A"),
-                range_from_label(pvr_sheet, row, "Yearly Unit Sales at Lowest Price"),
-                range_from_label(pvr_sheet, row, "Yearly Unit Sales at Highest Price"))
+                existing_instance = product_variables_ranges,
+                unit_margin = range_from_label(pvr_sheet, pvr_sheet_row, "Unit Margin"),
+                sga_factor = range_from_label(pvr_sheet, pvr_sheet_row, "SG&A"),
+                yearly_unit_sales_lowest_price = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales at Lowest Price"),
+                yearly_unit_sales_highest_price = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales at Highest Price"))
         
         if( pvr_exclude == None):
             mix_variables_ranges.append(product_variables_ranges)
