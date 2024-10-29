@@ -59,7 +59,7 @@ class ProductVariablesRanges:
                  years_of_development_growth = 0, # Years of development FTE increase from zero (linear)
                  years_of_development_maturity = 0, # Years of development FTE full usage
                  years_of_development_decline = 0, #Years of development FTE decrease to zero (linear)
-                 years_of_kumbia = 0, # Years after development before sales begin
+                 years_of_pilot = 0, # Years after development before sales begin
                  years_of_sales_growth = 0, # Years of sales increase from zero (linear)
                  years_of_sales_maturity = 0, # Years of full sales
                  years_of_sales_decline = 0, # Years of sales decrease to zero (linear)
@@ -80,7 +80,7 @@ class ProductVariablesRanges:
         self.years_of_development_growth = years_of_development_growth if years_of_development_growth is not None else [0, 0, 0]
         self.years_of_development_maturity = years_of_development_maturity if years_of_development_maturity is not None else [0, 0, 0]
         self.years_of_development_decline = years_of_development_decline if years_of_development_decline is not None else [0, 0, 0]
-        self.years_of_kumbia = years_of_kumbia if years_of_kumbia is not None else [0, 0, 0]
+        self.years_of_pilot = years_of_pilot if years_of_pilot is not None else [0, 0, 0]
         self.years_of_sales_growth = years_of_sales_growth if years_of_sales_growth is not None else [0, 0, 0]
         self.years_of_sales_maturity = years_of_sales_maturity if years_of_sales_maturity is not None else [0, 0, 0]
         self.years_of_sales_decline = years_of_sales_decline if years_of_sales_decline is not None else [0, 0, 0]
@@ -115,7 +115,7 @@ class ProductVariablesRanges:
             years_of_development_growth = 0,
             years_of_development_maturity = 0,
             years_of_development_decline = 0,
-            years_of_kumbia = 0,
+            years_of_pilot = 0,
             years_of_sales_growth = existing_instance.years_of_sales_growth,
             years_of_sales_maturity = existing_instance.years_of_sales_maturity,
             years_of_sales_decline = existing_instance.years_of_sales_decline,
@@ -174,7 +174,7 @@ class ProductVariablesSnapshot:
         self.years_of_development_decline = triangle(product_variables_ranges.years_of_development_decline)
         self.maintenance_ftes = triangle(product_variables_ranges.maintenance_ftes, tornado != Tornado.OFF and tornado != Tornado.Maint_Ftes)
         self.years_of_maintenance = triangle(product_variables_ranges.years_of_maintenance)
-        self.years_of_kumbia = triangle(product_variables_ranges.years_of_kumbia)
+        self.years_of_pilot = triangle(product_variables_ranges.years_of_pilot)
         self.years_of_sales_growth = triangle(product_variables_ranges.years_of_sales_growth)
         self.years_of_sales_maturity = triangle(product_variables_ranges.years_of_sales_maturity, tornado != Tornado.OFF and tornado != Tornado.Sales_Years)
         self.years_of_sales_decline = triangle(product_variables_ranges.years_of_sales_decline)
@@ -212,7 +212,7 @@ class ProductVariablesSnapshot:
 
     # compute the delay before sales begin
     def years_before_sales(self):
-        return self.years_mix_delay + self.years_of_development_growth + self.years_of_development_maturity + self.years_of_development_decline + self.years_of_kumbia
+        return self.years_mix_delay + self.years_of_development_growth + self.years_of_development_maturity + self.years_of_development_decline + self.years_of_pilot
 
     # compute the total number of years for the product
     def total_years(self):
@@ -538,7 +538,7 @@ def read_excel_data(file_path):
                 years_of_development_growth = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Development Growth"),
                 years_of_development_maturity = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Development Maturity"),
                 years_of_development_decline = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Development Decline"),
-                years_of_kumbia = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Kumbia"),
+                years_of_pilot = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Pilot"),
                 years_of_sales_growth = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Sales Growth"),
                 years_of_sales_maturity = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Sales Maturity"),
                 years_of_sales_decline = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Sales Decline"),
