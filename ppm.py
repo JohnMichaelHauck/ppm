@@ -27,23 +27,16 @@ def add_value_to_index(array, index, value):
 # Company Constants (user input)
 class CompanyConstants:
     def __init__(self,
-                 market_return = 0.0,
-                 yearly_development_fte_cost_pv = 17000,
-                 maximum_development_ftes = 6,
-                 development_cost_trend = 0.0,
-                 product_cost_trend = 0.0,
-                 product_price_trend = 0.0):
-        
-        # what we would expect to earn on an investment in a financial market with a similar risk
+                 market_return = 0.0, #What we would expect to earn on an investment in a financial market with a similar risk
+                 yearly_development_fte_cost_pv = 17000, # How much it costs per person to run a product development team (in present dollars)
+                 maximum_development_ftes = 6, # How many product developers are available to staff projects
+                 development_cost_trend = 0.0, # How much development costs increase each year
+                 product_cost_trend = 0.0, # How much product costs increase each year
+                 product_price_trend = 0.0): # How much product prices increase each year
+
         self.market_return = market_return
-        
-        # how much it costs per person to run a product development team (in present dollars)
         self.yearly_development_fte_cost_pv = yearly_development_fte_cost_pv
-
-        # staff size limit
         self.maximum_development_ftes = maximum_development_ftes
-
-        # how much things increase each year
         self.development_cost_trend = development_cost_trend
         self.product_cost_trend = product_cost_trend
         self.product_price_trend = product_price_trend
@@ -61,75 +54,81 @@ def cost_factor(margin):
 # Product Variables Ranges (user input)
 class ProductVariablesRanges:
     def __init__(self,
-                 years_of_development_growth = 0,
-                 years_of_development_maturity = 0,
-                 years_of_development_decline = 0,
-                 years_of_kumbia = 0,
-                 years_of_sales_growth = 0,
-                 years_of_sales_maturity = 0,
-                 years_of_sales_decline = 0,
-                 development_ftes = 0,
-                 maintenance_ftes = 0,
-                 years_of_maintenance = 0,
-                 unit_cost_pv = 0,
-                 unit_margin = 0,
-                 sga_factor = 0,
-                 yearly_unit_sales = 0):
-        
-        # development years profile
+                 name = "",
+                 type = "",
+                 years_of_development_growth = 0, # Years of development FTE increase from zero (linear)
+                 years_of_development_maturity = 0, # Years of development FTE full usage
+                 years_of_development_decline = 0, #Years of development FTE decrease to zero (linear)
+                 years_of_kumbia = 0, # Years after development before sales begin
+                 years_of_sales_growth = 0, # Years of sales increase from zero (linear)
+                 years_of_sales_maturity = 0, # Years of full sales
+                 years_of_sales_decline = 0, # Years of sales decrease to zero (linear)
+                 development_ftes = 0, # The number of people (full time equivalents) on the development team
+                 maintenance_ftes = 0, # The number of people that need to keep working on the product after development
+                 years_of_maintenance = 0, # The number of years people need to keep working on the product after development
+                 unit_cost_pv = 0, # The cost to manufacture one unit of the product (in present dollars)
+                 unit_margin = 0, # The percentage of the selling price that exceeds cost of goods
+                 sga_factor = 0, # The percentage of the selling price that is allocated to cover selling, general, and administrative
+                 yearly_unit_sales = 0, # The number of units that are expected to be sold per year
+                 yearly_unit_consumable_sales = 0, # The consumable sales per unit sold per year
+                 years_of_consumable_sales = 0, # The number of years consumables will be sold following a unit sale
+                 consumable_margin = 0): # The percentage of consumable sales that exceeds the consumable cost of goods
+
+        self.name = name
+        self.type = type
         self.years_mix_delay = 0
-        self.years_of_development_growth = years_of_development_growth
-        self.years_of_development_maturity = years_of_development_maturity
-        self.years_of_development_decline = years_of_development_decline
-
-        # sales years profile
-        self.years_of_kumbia = years_of_kumbia
-        self.years_of_sales_growth = years_of_sales_growth
-        self.years_of_sales_maturity = years_of_sales_maturity
-        self.years_of_sales_decline = years_of_sales_decline
-        
-        # the number of people (full time equivalents) on the development team
-        self.development_ftes = development_ftes
-
-        # the people that need to keep working on the product after development
-        self.maintenance_ftes = maintenance_ftes
-        self.years_of_maintenance = years_of_maintenance
-        
-        # the cost to manufacture one unit of the product (in present dollars)
-        self.unit_cost_pv = unit_cost_pv
-        
-        # the selling price margin
-        self.unit_margin = unit_margin
-
-        # the percentage of the selling price that is allocated to cover selling, general, and administrative expenses        
-        self.sga_factor = sga_factor
-
-        # the number of units that are expected to be sold per year
-        self.yearly_unit_sales = yearly_unit_sales
+        self.years_of_development_growth = years_of_development_growth if years_of_development_growth is not None else [0, 0, 0]
+        self.years_of_development_maturity = years_of_development_maturity if years_of_development_maturity is not None else [0, 0, 0]
+        self.years_of_development_decline = years_of_development_decline if years_of_development_decline is not None else [0, 0, 0]
+        self.years_of_kumbia = years_of_kumbia if years_of_kumbia is not None else [0, 0, 0]
+        self.years_of_sales_growth = years_of_sales_growth if years_of_sales_growth is not None else [0, 0, 0]
+        self.years_of_sales_maturity = years_of_sales_maturity if years_of_sales_maturity is not None else [0, 0, 0]
+        self.years_of_sales_decline = years_of_sales_decline if years_of_sales_decline is not None else [0, 0, 0]
+        self.development_ftes = development_ftes if development_ftes is not None else [0, 0, 0]
+        self.maintenance_ftes = maintenance_ftes if maintenance_ftes is not None else [0, 0, 0]
+        self.years_of_maintenance = years_of_maintenance if years_of_maintenance is not None else [0, 0, 0]
+        self.unit_cost_pv = unit_cost_pv if unit_cost_pv is not None else [0, 0, 0]
+        self.unit_margin = unit_margin if unit_margin is not None else [0, 0, 0]
+        self.sga_factor = sga_factor if sga_factor is not None else [0, 0, 0]
+        self.yearly_unit_sales = yearly_unit_sales if yearly_unit_sales is not None else [0, 0, 0]
+        self.yearly_unit_consumable_sales = yearly_unit_consumable_sales if yearly_unit_consumable_sales is not None else [0, 0, 0]
+        self.years_of_consumable_sales = years_of_consumable_sales if years_of_consumable_sales is not None else [0, 0, 0]
+        self.consumable_margin = consumable_margin if consumable_margin is not None else [0, 0, 0]
     
     @classmethod
     def market_of(
         cls,
+        name,
+        type,
         existing_instance,
+        unit_cost,
         unit_margin,
         sga_factor,
-        yearly_unit_sales):
+        yearly_unit_sales,
+        yearly_unit_consumable_sales,
+        years_of_consumable_sales,
+        consumable_margin):
 
         return cls(
+            name = name,
+            type = type,
             years_of_development_growth = 0,
             years_of_development_maturity = 0,
             years_of_development_decline = 0,
-            years_of_kumbia = existing_instance.years_of_kumbia,
+            years_of_kumbia = 0,
             years_of_sales_growth = existing_instance.years_of_sales_growth,
             years_of_sales_maturity = existing_instance.years_of_sales_maturity,
             years_of_sales_decline = existing_instance.years_of_sales_decline,
             development_ftes = 0,
             maintenance_ftes = 0,
             years_of_maintenance = 0,
-            unit_cost_pv = existing_instance.unit_cost_pv,
-            unit_margin = unit_margin,
-            sga_factor = sga_factor,
-            yearly_unit_sales = yearly_unit_sales)
+            unit_cost_pv = unit_cost if unit_cost is not None else existing_instance.unit_cost_pv,
+            unit_margin = unit_margin if unit_margin is not None else existing_instance.unit_margin,
+            sga_factor = sga_factor if sga_factor is not None else existing_instance.sga_factor,
+            yearly_unit_sales = yearly_unit_sales if yearly_unit_sales is not None else existing_instance.yearly_unit_sales,
+            yearly_unit_consumable_sales = yearly_unit_consumable_sales if yearly_unit_consumable_sales is not None else existing_instance.yearly_unit_consumable_sales,
+            years_of_consumable_sales = years_of_consumable_sales if years_of_consumable_sales is not None else existing_instance.years_of_consumable_sales,
+            consumable_margin = consumable_margin if consumable_margin is not None else existing_instance.consumable_margin)
     
 # Return a single random number, given a low, expected, and high range, using a triangular distribution
 # Just return the expected number if requested, or if the range is invalid
@@ -167,6 +166,8 @@ class ProductVariablesSnapshot:
         
         # convert various ranges to actual values using a triangular distribution (or use the likely value if a tornado sensitivity analysis is being performed)
         self.years_mix_delay = 0
+        self.name = product_variables_ranges.name
+        self.type = product_variables_ranges.type        
         self.development_ftes = triangle(product_variables_ranges.development_ftes, tornado != Tornado.OFF and tornado != Tornado.Dev_Ftes)
         self.years_of_development_growth = triangle(product_variables_ranges.years_of_development_growth)
         self.years_of_development_maturity = triangle(product_variables_ranges.years_of_development_maturity, tornado != Tornado.OFF and tornado != Tornado.Dev_Years)
@@ -185,10 +186,6 @@ class ProductVariablesSnapshot:
         # compute the unit price
         self.unit_price_pv = self.unit_cost_pv * cost_factor(self.unit_margin)
         
-        # precalculate the total remaining years
-        self.years_before_sales = self.years_of_development_growth + self.years_of_development_maturity + self.years_of_development_decline + self.years_of_kumbia
-        self.total_years = self.years_before_sales + self.years_of_sales_growth + self.years_of_sales_maturity + self.years_of_sales_decline
-
         # precalculate the development full time equivalents for each month
         self.ftes_by_month = []
         for month in range (round(self.years_of_development_growth * 12)):
@@ -213,6 +210,14 @@ class ProductVariablesSnapshot:
         if (len(self.unit_sales_by_month) == 0):
             self.unit_sales_by_month.append(0)
 
+    # compute the delay before sales begin
+    def years_before_sales(self):
+        return self.years_mix_delay + self.years_of_development_growth + self.years_of_development_maturity + self.years_of_development_decline + self.years_of_kumbia
+
+    # compute the total number of years for the product
+    def total_years(self):
+        return self.years_before_sales() + self.years_of_sales_growth + self.years_of_sales_maturity + self.years_of_sales_decline
+
     # compute the development full time equivalents for a given month
     def development_ftes_this_mix_month(self, month):
         month -= self.years_mix_delay * 12
@@ -221,8 +226,7 @@ class ProductVariablesSnapshot:
     
     # compute the unit sales for a given month
     def unit_sales_this_mix_month(self, month):
-        month -= self.years_mix_delay * 12
-        month -= self.years_before_sales * 12
+        month -= self.years_before_sales() * 12
         month = round(month)
         return self.unit_sales_by_month[month] if 0 <= month < len(self.unit_sales_by_month) else 0
 
@@ -288,7 +292,7 @@ def calculate_product_npv(product_variables_snapshot, company_constants):
     product_result = NpvCalculationResult()
 
     # loop through all the months
-    for month in range(round(product_variables_snapshot.total_years * 12) + 1):
+    for month in range(round(product_variables_snapshot.total_years() * 12) + 1):
         mix_month = month + round(product_variables_snapshot.years_mix_delay * 12)
     
         # compute the development_ftes for this month
@@ -321,8 +325,8 @@ def calculate_product_npv(product_variables_snapshot, company_constants):
     return product_result
 
 # Calculate the years mix delay based on the maximum development FTEs
-def calculate_years_mix_delay(maximum_development_ftes, allocated_ftes_by_month, new_ftes_by_month):
-    months_mix_delay = 0
+def calculate_years_mix_delay(maximum_development_ftes, minimum_years_mix_delay, allocated_ftes_by_month, new_ftes_by_month):
+    months_mix_delay = round(minimum_years_mix_delay * 12)
     maximum_development_ftes = max(maximum_development_ftes, max(new_ftes_by_month))
     allocated_ftes_by_month.extend([0] * len(new_ftes_by_month))
     while(True):
@@ -338,10 +342,15 @@ def calculate_years_mix_delay(maximum_development_ftes, allocated_ftes_by_month,
 # Calculate the NPV of a product mix
 def calculate_mix_npv(mix_variables_snapshot, company_constants):
     mix_result = NpvCalculationResult()
+    minimum_years_mix_delay = 0
     for product_variables_snapshot in mix_variables_snapshot.mix_variables_snapshots:
-        product_variables_snapshot.years_mix_delay = calculate_years_mix_delay(company_constants.maximum_development_ftes, mix_result.ftes_by_month, product_variables_snapshot.ftes_by_month)
+        if( product_variables_snapshot.type == "Product"):
+            minimum_years_mix_delay = 0
+        product_variables_snapshot.years_mix_delay = calculate_years_mix_delay(company_constants.maximum_development_ftes, minimum_years_mix_delay, mix_result.ftes_by_month, product_variables_snapshot.ftes_by_month)
         product_result = calculate_product_npv(product_variables_snapshot, company_constants)
         mix_result.add(product_result)
+        minimum_years_mix_delay = product_variables_snapshot.years_before_sales()
+
     return mix_result
 
 # Track all the results of multiple calculations
@@ -498,7 +507,7 @@ def read_excel_data(file_path):
         for row in range(start_row, sheet.max_row + 1):
             cell_value = sheet.cell(row=row, column=1).value
             if cell_value == None:
-                return [0,0,0]
+                return None
             if cell_value == label:
                 return [
                     sheet.cell(row=row, column=2).value,
@@ -512,16 +521,20 @@ def read_excel_data(file_path):
 
     for mix_sheet_row in range(2, mix_sheet.max_row + 1):
         pvr_sheet_name = mix_sheet.cell(row=mix_sheet_row, column=1).value
-        pvr_heading = mix_sheet.cell(row=mix_sheet_row, column=2).value
+        if( pvr_sheet_name == None ):
+            break
+        pvr_name = mix_sheet.cell(row=mix_sheet_row, column=2).value
         pvr_type = mix_sheet.cell(row=mix_sheet_row, column=3).value
         pvr_exclude = mix_sheet.cell(row=mix_sheet_row, column=4).value
         pvr_sheet = workbook[pvr_sheet_name]
-        pvr_sheet_row = row_from_label(pvr_sheet, 1, pvr_heading)
+        pvr_sheet_row = row_from_label(pvr_sheet, 1, pvr_name)
         if( pvr_sheet_row == 0):
             continue
 
         if( pvr_type == "Product"):
             product_variables_ranges = ProductVariablesRanges(
+                name = pvr_name,
+                type = pvr_type,
                 years_of_development_growth = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Development Growth"),
                 years_of_development_maturity = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Development Maturity"),
                 years_of_development_decline = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Development Decline"),
@@ -535,13 +548,22 @@ def read_excel_data(file_path):
                 unit_cost_pv = range_from_label(pvr_sheet, pvr_sheet_row, "Unit Cost"),
                 unit_margin = range_from_label(pvr_sheet, pvr_sheet_row, "Unit Margin"),
                 sga_factor = range_from_label(pvr_sheet, pvr_sheet_row, "SG&A"),
-                yearly_unit_sales = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales"))
+                yearly_unit_sales = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales"),
+                yearly_unit_consumable_sales = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Consumable Sales"),
+                years_of_consumable_sales = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Consumable Sales"),
+                consumable_margin = range_from_label(pvr_sheet, pvr_sheet_row, "Consumable Margin"))
         else:
             product_variables_ranges = ProductVariablesRanges.market_of(
+                name = pvr_name,
+                type = pvr_type,
                 existing_instance = product_variables_ranges,
+                unit_cost = range_from_label(pvr_sheet, pvr_sheet_row, "Unit Cost"),
                 unit_margin = range_from_label(pvr_sheet, pvr_sheet_row, "Unit Margin"),
                 sga_factor = range_from_label(pvr_sheet, pvr_sheet_row, "SG&A"),
-                yearly_unit_sales = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales"))
+                yearly_unit_sales = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Sales"),
+                yearly_unit_consumable_sales = range_from_label(pvr_sheet, pvr_sheet_row, "Yearly Unit Consumable Sales"),
+                years_of_consumable_sales = range_from_label(pvr_sheet, pvr_sheet_row, "Years of Consumable Sales"),
+                consumable_margin = range_from_label(pvr_sheet, pvr_sheet_row, "Consumable Margin"))
         
         if( pvr_exclude == None):
             mix_variables_ranges.append(product_variables_ranges)
