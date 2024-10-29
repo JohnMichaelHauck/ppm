@@ -182,6 +182,9 @@ class ProductVariablesSnapshot:
         self.unit_margin = triangle(product_variables_ranges.unit_margin, tornado != Tornado.OFF and tornado != Tornado.Margin)
         self.sga_factor = triangle(product_variables_ranges.sga_factor)
         self.yearly_unit_sales = triangle(product_variables_ranges.yearly_unit_sales, tornado != Tornado.OFF and tornado != Tornado.Yearly_Sales)
+        self.yearly_unit_consumable_sales = triangle(product_variables_ranges.yearly_unit_consumable_sales)
+        self.years_of_consumable_sales = triangle(product_variables_ranges.years_of_consumable_sales)
+        self.consumable_margin = triangle(product_variables_ranges.consumable_margin)
 
         # compute the unit price
         self.unit_price_pv = self.unit_cost_pv * cost_factor(self.unit_margin)
@@ -216,7 +219,7 @@ class ProductVariablesSnapshot:
 
     # compute the total number of years for the product
     def total_years(self):
-        return self.years_before_sales() + self.years_of_sales_growth + self.years_of_sales_maturity + self.years_of_sales_decline
+        return self.years_before_sales() + self.years_of_sales_growth + self.years_of_sales_maturity + self.years_of_sales_decline + self.years_of_consumable_sales
 
     # compute the development full time equivalents for a given month
     def development_ftes_this_mix_month(self, month):
@@ -290,6 +293,7 @@ def calculate_product_npv(product_variables_snapshot, company_constants):
 
     # this is what we will calculate and return 
     product_result = NpvCalculationResult()
+    unit_sales_history = []
 
     # loop through all the months
     for month in range(round(product_variables_snapshot.total_years() * 12) + 1):
@@ -300,27 +304,34 @@ def calculate_product_npv(product_variables_snapshot, company_constants):
 
         # compute the unit sales for this month
         unit_sales = product_variables_snapshot.unit_sales_this_mix_month(mix_month)
+        add_value_to_index(unit_sales_history, month, unit_sales)
+
+        # compute the consumable sales for this month
+        unit_sales_needing_consumables = sum(unit_sales_history[-round(product_variables_snapshot.years_of_consumable_sales * 12):])
 
         # compute the future value of the cost of development, unit cost, unit price, and sg&a for this month
         monthly_development_cost_fte_fv = fv(company_constants.yearly_development_fte_cost_pv / 12, company_constants.development_cost_trend / 12, mix_month)
         unit_cost_fv = fv(product_variables_snapshot.unit_cost_pv, company_constants.product_cost_trend / 12, mix_month)
         unit_price_fv = fv(product_variables_snapshot.unit_price_pv, company_constants.product_price_trend / 12, mix_month)
         sga_variable_fv = unit_price_fv * product_variables_snapshot.sga_factor
+        consumable_sales_fv = fv(product_variables_snapshot.yearly_unit_consumable_sales / 12, company_constants.product_price_trend / 12, mix_month)
 
         # return everything to present value
         development_cost_pv = pv(development_ftes * monthly_development_cost_fte_fv, company_constants.market_return / 12, mix_month)
         sales_pv = pv(unit_sales * unit_price_fv, company_constants.market_return / 12, mix_month)
         cost_of_goods_pv = pv(unit_sales * unit_cost_fv, company_constants.market_return / 12, mix_month)
         sga_pv = pv(unit_sales * sga_variable_fv, company_constants.market_return / 12, mix_month)
+        consumable_sales_pv = pv(unit_sales_needing_consumables * consumable_sales_fv, company_constants.market_return / 12, mix_month)
+        consumable_cost_of_goods_pv = consumable_sales_pv * (1 - product_variables_snapshot.consumable_margin)
 
         # add the results for this month to the total
         product_result.development_cost += development_cost_pv
-        product_result.sales += sales_pv
-        product_result.cost_of_goods += cost_of_goods_pv
+        product_result.sales += sales_pv + consumable_sales_pv
+        product_result.cost_of_goods += cost_of_goods_pv + consumable_cost_of_goods_pv
         product_result.sga += sga_pv
         product_result.unit_sales += unit_sales
         product_result.record_ftes(mix_month, development_ftes)
-        product_result.record_sales(mix_month, sales_pv)
+        product_result.record_sales(mix_month, sales_pv + consumable_sales_pv)
 
     return product_result
 
