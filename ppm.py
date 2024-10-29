@@ -246,12 +246,14 @@ class MixVariablesSnapshot:
 class NpvCalculationResult:
     def __init__(self):
         self.development_cost = 0
-        self.sales = 0
-        self.cost_of_goods = 0
+        self.sales = 0 # inlcudes consumable sales
+        self.consumable_sales = 0 # special breakout of consumable sales
+        self.cost_of_goods = 0 # includes consumable cost of goods
         self.sga = 0
         self.unit_sales = 0
         self.ftes_by_month = []
-        self.sales_by_month = []
+        self.sales_by_month = [] # includes consumable sales
+        self.consumable_sales_by_month = [] # special breakout of consumable sales
 
     def npv(self):
         return self.sales - self.cost_of_goods - self.sga - self.development_cost
@@ -277,9 +279,13 @@ class NpvCalculationResult:
     def record_sales(self, month, sales):
         add_value_to_index(self.sales_by_month, month, sales)
     
+    def record_consumable_sales(self, month, consumable_sales):
+        add_value_to_index(self.consumable_sales_by_month, month, consumable_sales)
+    
     def add(self, result):
         self.development_cost += result.development_cost
         self.sales += result.sales
+        self.consumable_sales += result.consumable_sales
         self.cost_of_goods += result.cost_of_goods
         self.sga += result.sga
         self.unit_sales += result.unit_sales
@@ -287,6 +293,8 @@ class NpvCalculationResult:
             add_value_to_index(self.ftes_by_month, month, result.ftes_by_month[month])
         for month in range(len(result.sales_by_month)):
             add_value_to_index(self.sales_by_month, month, result.sales_by_month[month])
+        for month in range(len(result.consumable_sales_by_month)):
+            add_value_to_index(self.consumable_sales_by_month, month, result.consumable_sales_by_month[month])
 
 # Calculate the NPV of a product
 def calculate_product_npv(product_variables_snapshot, company_constants):
@@ -327,11 +335,13 @@ def calculate_product_npv(product_variables_snapshot, company_constants):
         # add the results for this month to the total
         product_result.development_cost += development_cost_pv
         product_result.sales += sales_pv + consumable_sales_pv
+        product_result.consumable_sales += consumable_sales_pv
         product_result.cost_of_goods += cost_of_goods_pv + consumable_cost_of_goods_pv
         product_result.sga += sga_pv
         product_result.unit_sales += unit_sales
         product_result.record_ftes(mix_month, development_ftes)
         product_result.record_sales(mix_month, sales_pv + consumable_sales_pv)
+        product_result.record_consumable_sales(mix_month, consumable_sales_pv)
 
     return product_result
 
@@ -371,22 +381,27 @@ class SimulationTracker:
         self.development_costs_millions = []
         self.unit_sales = []
         self.sales_millions = []
+        self.consumable_sales_millions = []
         self.ros = []
         self.roi = []
         self.ftes_by_month = []
         self.sales_by_month = []
+        self.consumable_sales_by_month = []
     
     def add(self, result):
         self.npvs_millions.append(result.npv() / 1000000)
         self.development_costs_millions.append(result.development_cost / 1000000)
         self.unit_sales.append(result.unit_sales)
         self.sales_millions.append(result.sales / 1000000)
+        self.consumable_sales_millions.append(result.consumable_sales / 1000000)
         self.ros.append(result.ros() * 100)
         self.roi.append(result.roi() * 100)
         for month in range(len(result.ftes_by_month)):
             add_value_to_index(self.ftes_by_month, month, result.ftes_by_month[month])
         for month in range(len(result.sales_by_month)):
             add_value_to_index(self.sales_by_month, month, result.sales_by_month[month])
+        for month in range(len(result.consumable_sales_by_month)):
+            add_value_to_index(self.consumable_sales_by_month, month, result.consumable_sales_by_month[month])
 
 class TornadoTracker:
     def __init__(self, tornado, name):
@@ -434,6 +449,10 @@ class MonteCarloAnalyzer:
         for month in range(len(self.simulation_tracker.sales_by_month)):
             self.simulation_tracker.sales_by_month[month] /= simulations
 
+        # normalize consumable sales by dividing each value by the number of simulations
+        for month in range(len(self.simulation_tracker.consumable_sales_by_month)):
+            self.simulation_tracker.consumable_sales_by_month[month] /= simulations
+
         # compute the tornado analysis
         for i in range(100):    
             for tornado_tracker in self.tornado_trackers:
@@ -467,7 +486,7 @@ class MonteCarloAnalyzer:
 
     # plot the results
     def plot(self, file_path = ""):
-        rows = 3
+        rows = 4
         cols = 3
         plt.figure(figsize=(10, 5))
 
@@ -485,6 +504,9 @@ class MonteCarloAnalyzer:
 
         self.create_line_chart(self.simulation_tracker.ftes_by_month, 'Years', 'Ftes', 8, rows, cols, 'black')
         self.create_line_chart(self.simulation_tracker.sales_by_month, 'Years', 'Monthly Sales ($)', 9, rows, cols, 'black')
+
+        self.create_histogram(self.simulation_tracker.consumable_sales_millions, 20, 'Consumables ($ millions)', 11, rows, cols, 'red')
+        self.create_line_chart(self.simulation_tracker.consumable_sales_by_month, 'Years', 'Monthly Consumables ($)', 12, rows, cols, 'black')
 
         plt.tight_layout()
         if( file_path != ""):
