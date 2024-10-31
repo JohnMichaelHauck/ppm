@@ -517,7 +517,7 @@ class MonteCarloAnalyzer:
 
 def read_excel_data(file_path):
     # Load the workbook and select the sheets
-    workbook = load_workbook(file_path, data_only=True)
+    workbook = load_workbook(file_path, data_only=True, read_only=True)
     company_constants_sheet = workbook['Company Constants']
 
     # Initialize the CompanyConstants instance
