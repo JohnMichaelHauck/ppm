@@ -254,6 +254,7 @@ class NpvCalculationResult:
         self.ftes_by_month = []
         self.sales_by_month = [] # includes consumable sales
         self.consumable_sales_by_month = [] # special breakout of consumable sales
+        self.npv_by_month = []
 
     def npv(self):
         return self.sales - self.cost_of_goods - self.sga - self.development_cost
@@ -281,7 +282,10 @@ class NpvCalculationResult:
     
     def record_consumable_sales(self, month, consumable_sales):
         add_value_to_index(self.consumable_sales_by_month, month, consumable_sales)
-    
+
+    def record_npv_by_month(self, month, npv):
+        add_value_to_index(self.npv_by_month, month, npv)
+
     def add(self, result):
         self.development_cost += result.development_cost
         self.sales += result.sales
@@ -295,6 +299,8 @@ class NpvCalculationResult:
             add_value_to_index(self.sales_by_month, month, result.sales_by_month[month])
         for month in range(len(result.consumable_sales_by_month)):
             add_value_to_index(self.consumable_sales_by_month, month, result.consumable_sales_by_month[month])
+        for month in range(len(result.npv_by_month)):
+            add_value_to_index(self.npv_by_month, month, result.npv_by_month[month])
 
 # Calculate the NPV of a product
 def calculate_product_npv(product_variables_snapshot, company_constants):
@@ -342,6 +348,7 @@ def calculate_product_npv(product_variables_snapshot, company_constants):
         product_result.record_ftes(mix_month, development_ftes)
         product_result.record_sales(mix_month, sales_pv + consumable_sales_pv)
         product_result.record_consumable_sales(mix_month, consumable_sales_pv)
+        product_result.record_npv_by_month(mix_month, product_result.npv())
 
     return product_result
 
@@ -387,6 +394,7 @@ class SimulationTracker:
         self.ftes_by_month = []
         self.sales_by_month = []
         self.consumable_sales_by_month = []
+        self.years_to_break_even = []
     
     def add(self, result):
         self.npvs_millions.append(result.npv() / 1000000)
@@ -402,6 +410,14 @@ class SimulationTracker:
             add_value_to_index(self.sales_by_month, month, result.sales_by_month[month])
         for month in range(len(result.consumable_sales_by_month)):
             add_value_to_index(self.consumable_sales_by_month, month, result.consumable_sales_by_month[month])
+
+        # record the number of months to break even
+        months_to_break_even = 0
+        for npv in result.npv_by_month:
+            if npv > 0:
+                break
+            months_to_break_even += 1
+        self.years_to_break_even.append(months_to_break_even / 12)
 
 class TornadoTracker:
     def __init__(self, tornado, name):
@@ -493,6 +509,7 @@ class MonteCarloAnalyzer:
         self.create_histogram(self.simulation_tracker.unit_sales, 20, 'Sales (units)', 1, rows, cols, 'blue')
         self.create_histogram(self.simulation_tracker.sales_millions, 20, 'Sales ($ millions)', 2, rows, cols, 'red')
         self.create_histogram(self.simulation_tracker.development_costs_millions, 20, 'Development ($ millions)', 3, rows, cols, 'green')
+
         self.create_histogram(self.simulation_tracker.npvs_millions, 20, 'NPV ($ millions)', 4, rows, cols, 'purple')
         self.create_histogram(self.simulation_tracker.ros, 20, 'ROS (%)', 5, rows, cols, 'orange')
         self.create_histogram(self.simulation_tracker.roi, 20, 'ROI (%)', 6, rows, cols, 'pink')
@@ -500,11 +517,12 @@ class MonteCarloAnalyzer:
         tornado_names = [tornado_tracker.name for tornado_tracker in self.tornado_trackers]
         tornado_ranges = [tornado_tracker.range() for tornado_tracker in self.tornado_trackers]
         tornado_min_values = [tornado_tracker.min_value for tornado_tracker in self.tornado_trackers]
-        self.create_tornado_plot(tornado_names, tornado_ranges, tornado_min_values, 'NPV Sensitivity ($ millions)', 7, rows, cols)
 
+        self.create_tornado_plot(tornado_names, tornado_ranges, tornado_min_values, 'NPV Sensitivity ($ millions)', 7, rows, cols)
         self.create_line_chart(self.simulation_tracker.ftes_by_month, 'Years', 'Ftes', 8, rows, cols, 'black')
         self.create_line_chart(self.simulation_tracker.sales_by_month, 'Years', 'Monthly Sales ($)', 9, rows, cols, 'black')
 
+        self.create_histogram(self.simulation_tracker.years_to_break_even, 20, 'Years to Break Even', 10, rows, cols, 'teal')
         self.create_histogram(self.simulation_tracker.consumable_sales_millions, 20, 'Consumables ($ millions)', 11, rows, cols, 'red')
         self.create_line_chart(self.simulation_tracker.consumable_sales_by_month, 'Years', 'Monthly Consumables ($)', 12, rows, cols, 'black')
 
