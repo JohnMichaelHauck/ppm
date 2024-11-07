@@ -526,11 +526,13 @@ class MonteCarloAnalyzer:
         self.create_histogram(self.simulation_tracker.consumable_sales_millions, 20, 'Consumables ($ millions)', 11, rows, cols, 'red')
         self.create_line_chart(self.simulation_tracker.consumable_sales_by_month, 'Years', 'Monthly Consumables ($)', 12, rows, cols, 'black')
 
-        plt.tight_layout()
+        plt.tight_layout( pad=0, w_pad=0, h_pad=0 )
+
         if( file_path != ""):
             plt.savefig(file_path)
         else:
             plt.show()
+            
         plt.close()
 
 def read_excel_data(file_path):
