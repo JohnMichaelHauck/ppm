@@ -35,7 +35,7 @@ class MonteCarloPlotter:
 
         self.create_histogram(monte_carlo_results.simulation_tracker.npvs_millions, 20, 'NPV ($ millions)', 4, rows, cols, 'purple')
         self.create_histogram(monte_carlo_results.simulation_tracker.ros, 20, 'ROS (%)', 5, rows, cols, 'orange')
-        self.create_histogram(monte_carlo_results.simulation_tracker.roi, 20, 'ROI (%)', 6, rows, cols, 'pink')
+        self.create_histogram(monte_carlo_results.simulation_tracker.years_to_achieve_10pct_ros, 20, 'Years to 10% ROS', 6, rows, cols, 'pink')
 
         tornado_names = [tornado_tracker.name for tornado_tracker in monte_carlo_results.tornado_trackers]
         tornado_ranges = [tornado_tracker.range() for tornado_tracker in monte_carlo_results.tornado_trackers]

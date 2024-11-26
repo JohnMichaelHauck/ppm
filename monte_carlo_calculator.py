@@ -21,7 +21,7 @@ class MonteCarloCalculator:
             for tornado_tracker in monte_carlo_results.tornado_trackers:
                 mix_variables_snapshot = mvs.MixVariablesSnapshot(mix_variables_ranges, tornado_tracker.tornado)
                 mix_result = mc.MixCalculator().calculate_mix_npv(mix_variables_snapshot, company_constants)
-                tornado_tracker.add(mix_result.npv() / 1000000)
+                tornado_tracker.add(mix_result.net() / 1000000)
 
         # Sort the tornado trackers by range
         monte_carlo_results.tornado_trackers.sort(key=lambda x: x.range())

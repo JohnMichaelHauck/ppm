@@ -11,25 +11,19 @@ class NpvCalculationResult:
         self.ftes_by_month = []
         self.sales_by_month = [] # includes consumable sales
         self.consumable_sales_by_month = [] # special breakout of consumable sales
-        self.npv_by_month = []
+        self.cumulative_net_by_month = []
 
-    def npv(self):
+    def net(self):
         return self.sales - self.cost_of_goods - self.sga - self.development_cost
 
     def ros(self):
-        if( self.sales == 0):
-            return 0
-        return self.npv() / self.sales
+        return self.net() / self.sales if self.sales != 0 else 0
 
     def roi(self):
-        if( self.development_cost == 0):
-            return 0
-        return self.npv() / self.development_cost
+        return self.net() / self.development_cost if self.development_cost != 0 else 0
 
     def annualized_roi(self, years):
-        if( years == 0):
-            return 0
-        return (1 + self.roi()) ** (1 / years) - 1
+        return (1 + self.roi()) ** (1 / years) - 1 if years != 0 else 0
     
     def record_ftes(self, month, ftes):
         lh.add_value_to_index(self.ftes_by_month, month, ftes)
@@ -40,8 +34,8 @@ class NpvCalculationResult:
     def record_consumable_sales(self, month, consumable_sales):
         lh.add_value_to_index(self.consumable_sales_by_month, month, consumable_sales)
 
-    def record_npv_by_month(self, month, npv):
-        lh.add_value_to_index(self.npv_by_month, month, npv)
+    def record_cumulative_net_by_month(self, month, npv):
+        lh.add_value_to_index(self.cumulative_net_by_month, month, npv)
 
     def add(self, result):
         self.development_cost += result.development_cost
@@ -56,5 +50,5 @@ class NpvCalculationResult:
             lh.add_value_to_index(self.sales_by_month, month, result.sales_by_month[month])
         for month in range(len(result.consumable_sales_by_month)):
             lh.add_value_to_index(self.consumable_sales_by_month, month, result.consumable_sales_by_month[month])
-        for month in range(len(result.npv_by_month)):
-            lh.add_value_to_index(self.npv_by_month, month, result.npv_by_month[month])
+        for month in range(len(result.cumulative_net_by_month)):
+            lh.add_value_to_index(self.cumulative_net_by_month, month, result.cumulative_net_by_month[month])
