@@ -1,3 +1,4 @@
+import math
 import list_helpers as lh
 
 class SimulationTracker:
@@ -63,3 +64,10 @@ class SimulationTracker:
             # normalize consumable sales by dividing each value by the number of simulations
             for month in range(len(self.consumable_sales_by_month)):
                 self.consumable_sales_by_month[month] /= self.simulations
+            
+            max_years = math.ceil(max(self.years_to_break_even))
+            self.years_to_break_even = [max_years if value < 0 else value for value in self.years_to_break_even]
+            self.years_to_achieve_10pct_ros = [max_years if value < 0 else value for value in self.years_to_achieve_10pct_ros]
+
+
+

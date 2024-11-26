@@ -91,6 +91,8 @@ class ExcelHelpers():
             if( pvr_exclude == None):
                 mix_variables_ranges.append(product_variables_ranges)
 
+        workbook.close()
+
         return company_constants, mix_variables_ranges
 
     def insert_plot_into_excel(excel_file_path_in, excel_file_path_out, image_path):
@@ -106,3 +108,5 @@ class ExcelHelpers():
 
         # Save the workbook to the new file
         workbook.save(excel_file_path_out)
+
+        workbook.close()
